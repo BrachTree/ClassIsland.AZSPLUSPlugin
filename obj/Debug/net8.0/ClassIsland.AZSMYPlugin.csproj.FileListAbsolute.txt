@@ -1,0 +1,17 @@
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\ClassIsland.AZSMYPlugin.csproj.AssemblyReference.cache
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\Avalonia\Resources.Inputs.cache
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\Avalonia\resources
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\ClassIsland.AZSMYPlugin.GeneratedMSBuildEditorConfig.editorconfig
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\ClassIsland.AZSMYPlugin.AssemblyInfoInputs.cache
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\ClassIsland.AZSMYPlugin.AssemblyInfo.cs
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\ClassIsland.AZSMYPlugin.csproj.CoreCompileInputs.cache
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\ClassIsland.AZSMYPlugin.dll
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\refint\ClassIsland.AZSMYPlugin.dll
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\ClassIsland.AZSMYPlugin.pdb
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\bin\Debug\net8.0\icon.png
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\bin\Debug\net8.0\manifest.yml
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\bin\Debug\net8.0\README.md
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\bin\Debug\net8.0\ClassIsland.AZSMYPlugin.deps.json
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\bin\Debug\net8.0\ClassIsland.AZSMYPlugin.dll
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\bin\Debug\net8.0\ClassIsland.AZSMYPlugin.pdb
+c:\Users\AZ04A\Downloads\Classisland2AZSMY\ClassIsland.AZSMYPlugin\obj\Debug\net8.0\ref\ClassIsland.AZSMYPlugin.dll

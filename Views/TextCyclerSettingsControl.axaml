@@ -1,0 +1,107 @@
+<controls:ComponentBase x:TypeArguments="componentSettings:TextCyclerSettings"
+                  x:Class="ClassIsland.AZSMYPlugin.Views.TextCyclerSettingsControl"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ClassIsland.AZSMYPlugin.Views"
+             xmlns:controls="clr-namespace:ClassIsland.Core.Abstractions.Controls;assembly=ClassIsland.Core"
+             xmlns:componentSettings="clr-namespace:ClassIsland.AZSMYPlugin.Models.ComponentSettings"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="800">
+    <ScrollViewer>
+        <StackPanel Margin="16" Spacing="12"
+                    DataContext="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=local:TextCyclerSettingsControl}}">
+
+            <!-- 文本文件选择 -->
+            <StackPanel Spacing="6">
+                <TextBlock Text="文本文件" FontWeight="SemiBold" />
+                <TextBlock Text="选择要读取的 .txt 文件，每行为一个句子或一组句子。"
+                           FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBox Text="{Binding Settings.FilePath}"
+                             Watermark="选择文件路径…"
+                             IsReadOnly="True"
+                             Width="250" />
+                    <Button x:Name="BrowseButton" Content="浏览…" Click="OnBrowseClick" />
+                    <Button x:Name="RefreshButton" Content="刷新" Click="OnRefreshClick" />
+                </StackPanel>
+                <TextBlock Text="{Binding Settings.LoadStatus}"
+                           FontSize="12" Opacity="0.6" />
+            </StackPanel>
+
+            <!-- 轮播方式 -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="轮播方式" VerticalAlignment="Center" />
+                <ComboBox SelectedIndex="{Binding Settings.SlideMode, Mode=TwoWay}"
+                          Width="100">
+                    <ComboBoxItem>随机</ComboBoxItem>
+                    <ComboBoxItem>顺序</ComboBoxItem>
+                </ComboBox>
+            </StackPanel>
+
+            <!-- 默认显示时长 -->
+            <StackPanel Spacing="6">
+                <TextBlock Text="默认显示时长（秒）" FontWeight="SemiBold" />
+                <TextBlock Text="当文件中未指定时长时使用此值。"
+                           FontSize="12" Opacity="0.6" />
+                <NumericUpDown Minimum="0.5" Maximum="3600"
+                               Value="{Binding Settings.DefaultDuration}"
+                               FormatString="0.0" />
+            </StackPanel>
+
+            <!-- 字体大小 -->
+            <StackPanel Spacing="6">
+                <TextBlock Text="字体大小" FontWeight="SemiBold" />
+                <Slider Minimum="12" Maximum="40"
+                        Value="{Binding Settings.FontSize}"
+                        TickFrequency="1" IsSnapToTickEnabled="True" />
+            </StackPanel>
+
+            <!-- 启用过渡动画 -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="启用过渡动画" VerticalAlignment="Center" />
+                <ToggleSwitch IsChecked="{Binding Settings.EnableTransition}" />
+            </StackPanel>
+
+            <!-- 过渡动画类型 -->
+            <StackPanel Spacing="6">
+                <TextBlock Text="过渡动画类型" FontWeight="SemiBold" />
+                <TextBlock Text="选择切换句子时的动画效果。"
+                           FontSize="12" Opacity="0.6" />
+                <ComboBox SelectedIndex="{Binding Settings.AnimationType, Mode=TwoWay}"
+                          Width="150">
+                    <ComboBoxItem>淡入淡出</ComboBoxItem>
+                    <ComboBoxItem>向上滚动</ComboBoxItem>
+                    <ComboBoxItem>向下滚动</ComboBoxItem>
+                </ComboBox>
+            </StackPanel>
+
+            <!-- 长文本水平滚动 -->
+            <StackPanel Spacing="6">
+                <TextBlock Text="长文本水平滚动" FontWeight="SemiBold" />
+                <TextBlock Text="当文本超出容器宽度时自动水平滚动。"
+                           FontSize="12" Opacity="0.6" />
+                <StackPanel Spacing="8">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="容器宽度（px）" FontSize="13" />
+                        <NumericUpDown Minimum="100" Maximum="1000"
+                                       Value="{Binding Settings.ContainerWidth}"
+                                       FormatString="0"
+                                       Width="200"
+                                       HorizontalAlignment="Left" />
+                    </StackPanel>
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="默认滚动速度（px/秒）" FontSize="13" />
+                        <NumericUpDown Minimum="1" Maximum="500"
+                                       Value="{Binding Settings.DefaultScrollSpeed}"
+                                       FormatString="0"
+                                       Width="200"
+                                       HorizontalAlignment="Left" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</controls:ComponentBase>

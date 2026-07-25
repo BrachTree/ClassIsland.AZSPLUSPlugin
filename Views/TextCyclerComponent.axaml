@@ -1,0 +1,34 @@
+<controls:ComponentBase x:TypeArguments="componentSettings:TextCyclerSettings"
+                        x:Class="ClassIsland.AZSMYPlugin.Views.TextCyclerComponent"
+                        xmlns="https://github.com/avaloniaui"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                        xmlns:local="clr-namespace:ClassIsland.AZSMYPlugin.Views"
+                        xmlns:controls="clr-namespace:ClassIsland.Core.Abstractions.Controls;assembly=ClassIsland.Core"
+                        xmlns:componentSettings="clr-namespace:ClassIsland.AZSMYPlugin.Models.ComponentSettings"
+                        mc:Ignorable="d"
+                        d:DesignHeight="60" d:DesignWidth="350">
+    <ScrollViewer x:Name="ContainerScroll"
+                  HorizontalScrollBarVisibility="Hidden"
+                  VerticalScrollBarVisibility="Disabled"
+                  HorizontalAlignment="Left"
+                  VerticalAlignment="Center"
+                  ClipToBounds="True"
+                  IsHitTestVisible="False"
+                  DataContext="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=local:TextCyclerComponent}}">
+        <TextBlock x:Name="MainTextBlock"
+                   Text="请选择文本文件…"
+                   FontSize="{Binding Settings.FontSize}"
+                   HorizontalAlignment="Left"
+                   VerticalAlignment="Center"
+                   TextWrapping="NoWrap"
+                   Opacity="1">
+            <TextBlock.Transitions>
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.3"/>
+                </Transitions>
+            </TextBlock.Transitions>
+        </TextBlock>
+    </ScrollViewer>
+</controls:ComponentBase>
