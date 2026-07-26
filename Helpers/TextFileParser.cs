@@ -101,7 +101,7 @@ public static class TextFileParser
 
     /// <summary>
     /// 解析包含组的行（可能同时包含前缀单句）。
-    /// 紧贴模式（[ 前无空格）：前缀文本合并到组内第一个句子前面，一起显示。
+    /// 紧贴模式（[ 前无空格）：前缀文本拼接到每个组内句子前面，始终显示。
     /// 正常模式（[ 前有空格）：前缀作为独立单句先显示，再轮播组内句子。
     /// </summary>
     private static DisplayFrame? ParseCombinedLine(string line, int bracketIndex)
@@ -128,11 +128,14 @@ public static class TextFileParser
 
             if (attached && frame.HasGroup && !string.IsNullOrWhiteSpace(prefixText))
             {
-                // 紧贴模式：前缀文本合并到第一个组内句子前面，一起显示
-                frame.GroupItems[0].Text = prefixText + " " + frame.GroupItems[0].Text;
-                // 若第一个组内句子未指定颜色（白色），使用前缀的颜色
-                if (frame.GroupItems[0].Color == Colors.White && color != Colors.White)
-                    frame.GroupItems[0].Color = color;
+                // 紧贴模式：前缀文本拼接到每个组内句子前面，始终显示
+                foreach (var item in frame.GroupItems)
+                {
+                    item.Text = prefixText + " " + item.Text;
+                    // 若组内句子未指定颜色（白色），使用前缀的颜色
+                    if (item.Color == Colors.White && color != Colors.White)
+                        item.Color = color;
+                }
             }
             else
             {
