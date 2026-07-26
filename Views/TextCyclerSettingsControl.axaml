@@ -74,13 +74,15 @@
                     <ComboBoxItem>淡入淡出</ComboBoxItem>
                     <ComboBoxItem>向上滚动</ComboBoxItem>
                     <ComboBoxItem>向下滚动</ComboBoxItem>
+                    <ComboBoxItem>向左滚动</ComboBoxItem>
+                    <ComboBoxItem>向右滚动</ComboBoxItem>
                 </ComboBox>
             </StackPanel>
 
             <!-- 长文本水平滚动 -->
             <StackPanel Spacing="6">
-                <TextBlock Text="长文本水平滚动" FontWeight="SemiBold" />
-                <TextBlock Text="当文本超出容器宽度时自动水平滚动。"
+                <TextBlock Text="长文本水平滚动（&lt;long&gt; 标记）" FontWeight="SemiBold" />
+                <TextBlock Text="标记 &lt;long&gt; 的单句会在此宽度内水平滚动。"
                            FontSize="12" Opacity="0.6" />
                 <StackPanel Spacing="8">
                     <StackPanel Spacing="2">

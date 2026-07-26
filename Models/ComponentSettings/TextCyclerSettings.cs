@@ -100,7 +100,7 @@ public class TextCyclerSettings : ObservableRecipient
     }
 
     /// <summary>
-    /// 过渡动画类型。0=淡入淡出，1=向上滚动，2=向下滚动
+    /// 过渡动画类型。0=淡入淡出，1=向上滚动，2=向下滚动，3=向左滚动，4=向右滚动
     /// </summary>
     public int AnimationType
     {
@@ -115,7 +115,7 @@ public class TextCyclerSettings : ObservableRecipient
 
     /// <summary>
     /// 默认水平滚动速度（px/秒）。当文件中未指定滚动速度时使用。
-    /// 仅当文本超出容器宽度时生效。
+    /// 仅对标记 <long> 的单句生效。
     /// </summary>
     public double DefaultScrollSpeed
     {
@@ -129,7 +129,7 @@ public class TextCyclerSettings : ObservableRecipient
     }
 
     /// <summary>
-    /// 文本容器宽度（px）。固定为 350px。
+    /// 滚动容器宽度（px）。标记 &lt;long&gt; 的文本在此宽度内水平滚动。
     /// </summary>
     public int ContainerWidth
     {

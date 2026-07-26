@@ -33,14 +33,11 @@ public class DisplayFrame
     public bool DisableTransition { get; set; } = false;
 
     /// <summary>
-    /// 组内水平滚动速度（px/秒）。0 表示使用默认速度。
+    /// 组内过渡动画类型。
+    /// A=淡入淡出，B=向上滚动，C=向下滚动，D=向左滚动，E=向右滚动。
+    /// 默认 B（向上滚动）。仅当过渡动画启用时生效。
     /// </summary>
-    public double GroupScrollSpeed { get; set; } = 0;
-
-    /// <summary>
-    /// 组内滚动完成后是否暂停。
-    /// </summary>
-    public bool GroupPauseAfterScroll { get; set; } = true;
+    public string GroupAnimationType { get; set; } = "B";
 
     /// <summary>
     /// 是否包含组

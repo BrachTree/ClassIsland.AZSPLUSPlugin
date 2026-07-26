@@ -13,7 +13,7 @@ namespace ClassIsland.AZSMYPlugin.Views;
 
 /// <summary>
 /// 文本轮播显示组件。从 txt 文件读取句子，按设定的时长随机或顺序轮播显示。
-/// 支持淡入淡出、上下滚动过渡动画，以及长文本水平滚动（仅单句）。
+/// 支持淡入淡出、上下左右滚动过渡动画，以及长文本水平滚动（仅单句）。
 /// </summary>
 [ComponentInfo("A3F5E2B1-7C4D-4E8F-9A2B-5D1E7F3A6B8C", "文本轮播 - AZS.Plus", "\ue8a5", "从本地 txt 文件读取句子并轮播显示。")]
 public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
@@ -37,9 +37,15 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         /// 该条目是否属于同一帧内且紧贴前缀帧的组内条目（前缀应保持显示）。
         /// </summary>
         public bool ShowAttachedPrefix { get; set; } = false;
+        /// <summary>
+        /// 动画类型覆盖。null/空 = 使用组件设置，A-E = 指定动画类型。
+        /// </summary>
+        public string? AnimationTypeOverride { get; set; }
+        /// <summary>
+        /// 是否为长文本（需水平滚动）。通过 &lt;long&gt; 参数显式指定。
+        /// </summary>
+        public bool IsLongText { get; set; } = false;
     }
-
-    private const int LongTextCharThreshold = 40;
 
     private readonly List<DisplayEntry> _entries = new();
     private readonly Queue<int> _randomFramePlaylist = new();
@@ -50,6 +56,15 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private TranslateTransform? _textTransform;
     private static readonly Transitions YTransitions = new()
     {
+        new DoubleTransition { Property = TranslateTransform.YProperty, Duration = TimeSpan.FromMilliseconds(300) }
+    };
+    private static readonly Transitions XTransitions = new()
+    {
+        new DoubleTransition { Property = TranslateTransform.XProperty, Duration = TimeSpan.FromMilliseconds(300) }
+    };
+    private static readonly Transitions XYTransitions = new()
+    {
+        new DoubleTransition { Property = TranslateTransform.XProperty, Duration = TimeSpan.FromMilliseconds(300) },
         new DoubleTransition { Property = TranslateTransform.YProperty, Duration = TimeSpan.FromMilliseconds(300) }
     };
 
@@ -152,7 +167,8 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                     ScrollSpeed = frame.Prefix.ScrollSpeed,
                     PauseAfterScroll = frame.Prefix.PauseAfterScroll,
                     IsSingleSentence = true,
-                    FrameIndex = fi
+                    FrameIndex = fi,
+                    IsLongText = frame.Prefix.IsLongText
                 });
             }
 
@@ -173,7 +189,8 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                         FrameIndex = fi,
                         AttachedPrefixText = attachedText,
                         AttachedPrefixColor = attachedColor,
-                        ShowAttachedPrefix = attachedText != null
+                        ShowAttachedPrefix = attachedText != null,
+                        AnimationTypeOverride = frame.GroupAnimationType
                     });
                 }
             }
@@ -305,18 +322,60 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private void SetXInstant(double value)
     {
         if (_textTransform == null) return;
+        _textTransform.Transitions = null;
         _textTransform.X = value;
     }
 
+    private void SetXAnimated(double value, int ms)
+    {
+        if (_textTransform == null) return;
+        // 同步 X 过渡时长
+        foreach (var t in XTransitions)
+            if (t is DoubleTransition dt) dt.Duration = TimeSpan.FromMilliseconds(ms);
+        _textTransform.Transitions = XTransitions;
+        _textTransform.X = value;
+    }
+
+    private void SetXYInstant(double x, double y)
+    {
+        if (_textTransform == null) return;
+        _textTransform.Transitions = null;
+        _textTransform.X = x;
+        _textTransform.Y = y;
+    }
+
     /// <summary>
-    /// 根据条目时长计算过渡动画时长。动画时长不超过显示时长的40%。
+    /// 根据条目时长计算过渡动画时长。
+    /// 每步动画时长 = 显示时长的25%，总动画 = 2步 = 50%。
+    /// 最小30ms保证极短时长也有动画，最大400ms避免长时长动画过慢。
     /// </summary>
     private int GetTransitionDurationMs(double entryDuration)
     {
-        int maxMs = (int)(entryDuration * 1000 * 0.4);
-        if (maxMs < 100) maxMs = 100;
-        if (maxMs > 300) maxMs = 300;
+        int maxMs = (int)(entryDuration * 1000 * 0.25);
+        if (maxMs < 30) maxMs = 30;
+        if (maxMs > 400) maxMs = 400;
         return maxMs;
+    }
+
+    /// <summary>
+    /// 解析动画类型。优先使用条目覆盖，否则使用组件设置。
+    /// A=淡入淡出(0)，B=向上滚动(1)，C=向下滚动(2)，D=向左滚动(3)，E=向右滚动(4)
+    /// </summary>
+    private int ResolveAnimationType(DisplayEntry entry)
+    {
+        if (!string.IsNullOrEmpty(entry.AnimationTypeOverride))
+        {
+            return entry.AnimationTypeOverride.ToUpperInvariant() switch
+            {
+                "A" => 0,
+                "B" => 1,
+                "C" => 2,
+                "D" => 3,
+                "E" => 4,
+                _ => Settings.AnimationType
+            };
+        }
+        return Settings.AnimationType;
     }
 
     private async Task ApplyEntryAsync(DisplayEntry entry)
@@ -339,7 +398,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
             if (!entry.UseTransition)
             {
-                SetYInstant(0); SetXInstant(0);
+                SetXYInstant(0, 0);
                 MainTextBlock.Text = entry.Text;
                 MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
                 MainTextBlock.Opacity = 1;
@@ -347,10 +406,13 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             }
             else
             {
-                switch (Settings.AnimationType)
+                int animType = ResolveAnimationType(entry);
+                switch (animType)
                 {
                     case 1: await ApplyScrollVerticalAsync(entry, true, transMs); break;
                     case 2: await ApplyScrollVerticalAsync(entry, false, transMs); break;
+                    case 3: await ApplyScrollHorizontalAsync(entry, true, transMs); break;
+                    case 4: await ApplyScrollHorizontalAsync(entry, false, transMs); break;
                     default: await ApplyFadeAsync(entry, transMs); break;
                 }
             }
@@ -362,7 +424,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     private async Task ApplyFadeAsync(DisplayEntry entry, int transMs)
     {
-        SetYInstant(0); SetXInstant(0);
+        SetXYInstant(0, 0);
         // 同步 opacity 过渡时长与 transMs
         if (MainTextBlock.Transitions != null)
         {
@@ -382,34 +444,58 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     private async Task ApplyScrollVerticalAsync(DisplayEntry entry, bool scrollUp, int transMs)
     {
-        // 连续滚动：旧文本从中间滚出，新文本同时从另一侧滚入，无缝衔接
         double scrollDist = GetVerticalScrollDistance();
         MainTextBlock.Opacity = 1;
 
         // 同步 Y 过渡时长
-        if (_textTransform != null)
-        {
-            foreach (var t in YTransitions)
-            {
-                if (t is DoubleTransition dt)
-                    dt.Duration = TimeSpan.FromMilliseconds(transMs);
-            }
-        }
+        foreach (var t in YTransitions)
+            if (t is DoubleTransition dt) dt.Duration = TimeSpan.FromMilliseconds(transMs);
 
-        // Step 1: 旧文本滚出 + 新文本从另一侧滚入（一步到位）
+        // Step 1: 旧文本滚出
         double outY = scrollUp ? -scrollDist : scrollDist;
         SetYAnimated(outY);
         await Task.Delay(transMs);
 
-        // Step 2: 在滚动到位的瞬间切换文本，并瞬间定位到对面
+        // Step 2: 瞬间切换文本并定位到对面
         MainTextBlock.Text = entry.Text;
         MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
-        SetYInstant(scrollUp ? scrollDist : -scrollDist);
-        SetXInstant(0);
+        SetXYInstant(0, scrollUp ? scrollDist : -scrollDist);
 
-        // Step 3: 新文本滚入到中心（无缝衔接，无额外停顿）
+        // Step 3: 新文本滚入到中心
         SetYAnimated(0);
         await Task.Delay(transMs);
+    }
+
+    /// <summary>
+    /// 无缝水平滚动过渡：旧文本向左/右滚出，新文本从另一侧滚入。
+    /// </summary>
+    private async Task ApplyScrollHorizontalAsync(DisplayEntry entry, bool scrollLeft, int transMs)
+    {
+        double scrollDist = GetHorizontalScrollDistance();
+        MainTextBlock.Opacity = 1;
+
+        // Step 1: 旧文本向指定方向滚出
+        double outX = scrollLeft ? -scrollDist : scrollDist;
+        SetXAnimated(outX, transMs);
+        await Task.Delay(transMs);
+
+        // Step 2: 瞬间切换文本并定位到对面
+        MainTextBlock.Text = entry.Text;
+        MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
+        SetXYInstant(scrollLeft ? scrollDist : -scrollDist, 0);
+
+        // Step 3: 新文本从另一侧滚入到中心
+        SetXAnimated(0, transMs);
+        await Task.Delay(transMs);
+    }
+
+    /// <summary>
+    /// 获取水平滚动距离（使用容器宽度）
+    /// </summary>
+    private double GetHorizontalScrollDistance()
+    {
+        double w = ContainerScroll.Bounds.Width;
+        return w > 0 ? w + 10 : Settings.ContainerWidth + 10;
     }
 
     // === 水平滚动（仅独立单句） ===
@@ -425,33 +511,34 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         _isLongText = false;
         _scrollFinished = false;
         _isPauseMode = false;
-        Dispatcher.UIThread.Post(() => { ContainerScroll.Width = double.NaN; });
+        Dispatcher.UIThread.Post(() => { ContainerScroll.MaxWidth = double.PositiveInfinity; });
 
         if (!entry.IsSingleSentence) { SetXInstant(0); _isScrolling = false; return; }
 
-        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-
-        // 长文本判定：字符数超过阈值（仅独立单句）
-        if (entry.Text.Length <= LongTextCharThreshold)
+        // 长文本判定：仅当显式标记 <long> 时才滚动
+        if (!entry.IsLongText)
         {
             SetXInstant(0); _isScrolling = false; return;
         }
 
-        double containerWidth = Bounds.Width > 0 ? Bounds.Width : Settings.ContainerWidth;
+        double containerWidth = Settings.ContainerWidth;
+
+        // 限制 ScrollViewer 宽度并等待布局完成
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            ContainerScroll.MaxWidth = containerWidth;
+            ContainerScroll.InvalidateMeasure();
+        });
+
+        // 等待布局渲染完成
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+
         double textWidth = MeasureTextWidth();
 
-        if (textWidth <= containerWidth + 1)
-        {
-            SetXInstant(0); _isScrolling = false; return;
-        }
-
-        Dispatcher.UIThread.Post(() => { ContainerScroll.Width = containerWidth; });
-        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-        textWidth = MeasureTextWidth();
-
+        // 标记 <long> 的文本一律滚动，无论是否超过容器宽度
         _isLongText = true;
         _isPauseMode = entry.PauseAfterScroll;
-        _scrollDistance = textWidth - containerWidth;
+        _scrollDistance = Math.Max(0, textWidth - containerWidth);
         _effectiveScrollSpeed = entry.ScrollSpeed > 0 ? entry.ScrollSpeed : Settings.DefaultScrollSpeed;
         _scrollPausedAtEnd = false;
         _scrollStartTime = DateTime.UtcNow;
@@ -467,7 +554,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         _isScrolling = false; _isLongText = false;
         _scrollPausedAtEnd = false; _scrollFinished = false; _isPauseMode = false;
         SetXInstant(0);
-        Dispatcher.UIThread.Post(() => { ContainerScroll.Width = double.NaN; });
+        Dispatcher.UIThread.Post(() => { ContainerScroll.MaxWidth = double.PositiveInfinity; });
     }
 
     private void OnScrollTick(object? sender, EventArgs e)
@@ -510,7 +597,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     private void ApplyEntry(DisplayEntry entry)
     {
-        SetYInstant(0); SetXInstant(0);
+        SetXYInstant(0, 0);
         UpdateAttachedPrefix(entry.ShowAttachedPrefix ? entry.AttachedPrefixText : null,
                               entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White);
         MainTextBlock.Text = entry.Text;

@@ -13,14 +13,20 @@ namespace ClassIsland.AZSMYPlugin.Helpers;
 /// 文本中的下划线 _ 会被替换为空格，用于在组内创建含空格的句子。
 ///
 /// 支持的格式（颜色均可有可无，默认白色）：
-/// 1. 单句：  句子 &lt;显示时长&gt; &lt;颜色&gt; &lt;滚动速度&gt; &lt;是否滚动完暂停&gt;
-/// 2. 组：    [句子1&lt;颜色&gt; 句子2 句子3 &lt;每句显示时长&gt; &lt;是否禁用过渡动画&gt; &lt;滚动速度&gt; &lt;是否滚动完暂停&gt;]
-/// 3. 混合：  句子&lt;颜色&gt; [句子1 句子2 句子3 &lt;每句时长&gt; &lt;是否禁用过渡动画&gt; &lt;滚动速度&gt; &lt;是否滚动完暂停&gt;]
+/// 1. 单句：  句子 &lt;显示时长&gt; &lt;颜色&gt; &lt;滚动速度px&gt; &lt;是否滚动完暂停&gt; &lt;long&gt;
+/// 2. 组：    [句子1&lt;颜色&gt; 句子2 句子3 &lt;每句显示时长&gt; &lt;是否禁用过渡动画&gt; &lt;动画类型A-E&gt;]
+/// 3. 混合：  句子&lt;颜色&gt; [句子1 句子2 句子3 &lt;每句时长&gt; &lt;是否禁用过渡动画&gt; &lt;动画类型A-E&gt;]
 ///
 /// 参数说明：
-/// - &lt;滚动速度&gt;：水平滚动速度（px/秒），仅当文本超出容器宽度（350px）时生效。
-/// - &lt;是否滚动完暂停&gt;：true=滚动完成后暂停在末尾，false=循环滚动。默认 false。
+/// - &lt;显示时长&gt;：纯数字，如 &lt;5&gt; 表示5秒。&lt;50px&gt; 带px后缀则识别为滚动速度。
+/// - &lt;滚动速度px&gt;：水平滚动速度（px/秒）。如 &lt;50px&gt;。
+/// - &lt;是否滚动完暂停&gt;：true=滚动完成后暂停在末尾，false=循环滚动。默认 true。
+/// - &lt;long&gt;：标记为长文本（需水平滚动）。不写则不滚动。
 /// - &lt;是否禁用过渡动画&gt;：true=禁用过渡动画，false=跟随组件设置。默认 false。
+/// - &lt;动画类型A-E&gt;：A=淡入淡出，B=向上滚动，C=向下滚动，D=向左滚动，E=向右滚动。默认 B。
+///   仅组内句子生效，单句使用组件设置中的动画类型。
+///
+/// 注意：组格式和混合格式中的组内部分**不支持滚动**，不解析滚动速度和暂停参数。
 /// </summary>
 public static class TextFileParser
 {
@@ -85,7 +91,7 @@ public static class TextFileParser
     /// </summary>
     private static DisplayFrame ParseSingleSentence(string line)
     {
-        var (text, duration, color, scrollSpeed, pauseAfterScroll) = ExtractTextAndParams(line, 0);
+        var (text, duration, color, scrollSpeed, pauseAfterScroll, isLongText) = ExtractTextAndParams(line, 0);
         return new DisplayFrame
         {
             Prefix = new DisplayItem
@@ -94,7 +100,8 @@ public static class TextFileParser
                 Color = color,
                 Duration = duration,
                 ScrollSpeed = scrollSpeed,
-                PauseAfterScroll = pauseAfterScroll
+                PauseAfterScroll = pauseAfterScroll,
+                IsLongText = isLongText
             }
         };
     }
@@ -120,7 +127,7 @@ public static class TextFileParser
 
         if (!string.IsNullOrWhiteSpace(prefixPart))
         {
-            var (text, duration, color, scrollSpeed, pauseAfterScroll) = ExtractTextAndParams(prefixPart, 0);
+            var (text, duration, color, scrollSpeed, pauseAfterScroll, isLongText) = ExtractTextAndParams(prefixPart, 0);
             var prefixText = ReplaceUnderscores(text);
 
             // 判断 [ 前面是否有空格分隔
@@ -144,7 +151,8 @@ public static class TextFileParser
                     Color = color,
                     Duration = duration,
                     ScrollSpeed = scrollSpeed,
-                    PauseAfterScroll = pauseAfterScroll
+                    PauseAfterScroll = pauseAfterScroll,
+                    IsLongText = isLongText
                 };
             }
         }
@@ -157,8 +165,9 @@ public static class TextFileParser
 
     /// <summary>
     /// 解析组内容。
-    /// 组尾部参数顺序：&lt;每句时长&gt; &lt;是否禁用过渡动画&gt; &lt;滚动速度&gt; &lt;是否滚动完暂停&gt;
-    /// 类型模式：num, bool, num, bool
+    /// 组尾部参数顺序：&lt;每句时长&gt; &lt;是否禁用过渡动画&gt; &lt;动画类型A-E&gt;
+    /// 类型模式：num, bool, string(A-E)
+    /// 注意：组内不支持滚动，不解析滚动速度和暂停参数。
     /// </summary>
     private static void ParseGroup(string content, DisplayFrame frame)
     {
@@ -183,32 +192,40 @@ public static class TextFileParser
                 break;
         }
 
-        // 分类参数：num, bool, num, bool
+        // 分类参数：num, bool, string(动画类型)
+        // 注意：组内不支持滚动，忽略带px后缀的数字和滚动暂停布尔值
         var numbers = new List<double>();
         var bools = new List<bool>();
+        var animTypes = new List<string>();
 
         foreach (var param in trailingParams)
         {
             var inner = GetParamInner(param);
             if (TryParseBool(inner, out bool b))
                 bools.Add(b);
+            else if (TryParseScrollSpeed(inner, out double sp))
+            {
+                // 组内不支持滚动，忽略 <50px> 参数
+            }
             else if (double.TryParse(inner, NumberStyles.Float, CultureInfo.InvariantCulture, out double n))
                 numbers.Add(n);
+            else if (TryParseAnimationType(inner, out string a))
+                animTypes.Add(a);
             // 颜色在组级别不处理（颜色附着在句子上）
         }
 
         // 按位置赋值
-        // numbers: [perItemDuration, scrollSpeed]
-        // bools: [disableTransition, pauseAfterScroll]
+        // numbers: [perItemDuration]
+        // bools: [disableTransition]
+        // animTypes: [groupAnimationType]
         if (numbers.Count >= 1)
             frame.PerItemDuration = numbers[0];
-        if (numbers.Count >= 2)
-            frame.GroupScrollSpeed = numbers[1];
 
         if (bools.Count >= 1)
             frame.DisableTransition = bools[0];
-        if (bools.Count >= 2)
-            frame.GroupPauseAfterScroll = bools[1];
+
+        if (animTypes.Count >= 1)
+            frame.GroupAnimationType = animTypes[0];
 
         // 剩余的 token 是句子
         for (int i = 0; i < paramStart; i++)
@@ -228,10 +245,14 @@ public static class TextFileParser
 
     /// <summary>
     /// 从一段文本中提取尾部 &lt;参数&gt; 和剩余文本。
-    /// 参数顺序：&lt;显示时长&gt; &lt;颜色&gt; &lt;滚动速度&gt; &lt;是否滚动完暂停&gt;
-    /// 类型模式：num, color, num, bool
+    /// 参数通过类型区分：
+    /// - &lt;显示时长&gt;：纯数字，如 &lt;5&gt;
+    /// - &lt;滚动速度px&gt;：数字+px后缀，如 &lt;50px&gt;
+    /// - &lt;颜色&gt;：颜色名或十六进制
+    /// - &lt;是否滚动完暂停&gt;：true/false
+    /// - &lt;long&gt;：标记为长文本（需水平滚动）
     /// </summary>
-    private static (string text, double duration, Color color, double scrollSpeed, bool pauseAfterScroll)
+    private static (string text, double duration, Color color, double scrollSpeed, bool pauseAfterScroll, bool isLongText)
         ExtractTextAndParams(string line, double defaultDuration)
     {
         line = line.Trim();
@@ -250,31 +271,36 @@ public static class TextFileParser
         }
 
         // 分类参数
-        var numbers = new List<double>();
-        var colors = new List<Color>();
-        var bools = new List<bool>();
+        double duration = defaultDuration;
+        double scrollSpeed = 0;
+        Color color = Colors.White;
+        bool pauseAfterScroll = true;
+        bool isLongText = false;
+        bool durationSet = false;
 
         foreach (var param in paramList)
         {
             var inner = GetParamInner(param);
             if (TryParseBool(inner, out bool b))
-                bools.Add(b);
+                pauseAfterScroll = b;
             else if (TryParseColor(inner, out Color c))
-                colors.Add(c);
+                color = c;
+            else if (TryParseScrollSpeed(inner, out double sp))
+                scrollSpeed = sp;
+            else if (TryParseLongFlag(inner))
+                isLongText = true;
             else if (double.TryParse(inner, NumberStyles.Float, CultureInfo.InvariantCulture, out double n))
-                numbers.Add(n);
+            {
+                // 纯数字 = 显示时长
+                if (!durationSet)
+                {
+                    duration = n;
+                    durationSet = true;
+                }
+            }
         }
 
-        // 按位置赋值
-        // numbers: [duration, scrollSpeed]
-        // colors: [color]
-        // bools: [pauseAfterScroll]
-        double duration = numbers.Count >= 1 ? numbers[0] : defaultDuration;
-        double scrollSpeed = numbers.Count >= 2 ? numbers[1] : 0;
-        Color color = colors.Count >= 1 ? colors[0] : Colors.White;
-        bool pauseAfterScroll = bools.Count >= 1 ? bools[0] : true;
-
-        return (line, duration, color, scrollSpeed, pauseAfterScroll);
+        return (line, duration, color, scrollSpeed, pauseAfterScroll, isLongText);
     }
 
     /// <summary>
@@ -409,5 +435,50 @@ public static class TextFileParser
                 result = false;
                 return false;
         }
+    }
+
+    /// <summary>
+    /// 尝试解析动画类型参数。A=淡入淡出，B=向上滚动，C=向下滚动，D=向左滚动，E=向右滚动。
+    /// </summary>
+    private static bool TryParseAnimationType(string str, out string animType)
+    {
+        animType = "";
+        if (string.IsNullOrWhiteSpace(str)) return false;
+        str = str.Trim().ToUpperInvariant();
+        if (str.Length == 1 && str[0] >= 'A' && str[0] <= 'E')
+        {
+            animType = str;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 尝试解析滚动速度参数。格式为数字+px后缀，如 "50px"。
+    /// </summary>
+    private static bool TryParseScrollSpeed(string str, out double speed)
+    {
+        speed = 0;
+        if (string.IsNullOrWhiteSpace(str)) return false;
+        str = str.Trim();
+        if (str.Length > 2 && str.EndsWith("px", StringComparison.OrdinalIgnoreCase))
+        {
+            var numStr = str.Substring(0, str.Length - 2).Trim();
+            if (double.TryParse(numStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double n))
+            {
+                speed = n;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 尝试解析长文本标记参数 "long"。
+    /// </summary>
+    private static bool TryParseLongFlag(string str)
+    {
+        if (string.IsNullOrWhiteSpace(str)) return false;
+        return str.Trim().Equals("long", StringComparison.OrdinalIgnoreCase);
     }
 }

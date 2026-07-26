@@ -23,8 +23,8 @@ public class DisplayItem
     public double Duration { get; set; } = 5.0;
 
     /// <summary>
-    /// 水平滚动速度（px/秒）。0 表示不滚动（使用默认行为）。
-    /// 仅当文本超出容器宽度时生效。
+    /// 水平滚动速度（px/秒）。0 表示使用组件设置的默认速度。
+    /// 仅当标记 IsLongText 时生效。
     /// </summary>
     public double ScrollSpeed { get; set; } = 0;
 
@@ -33,6 +33,12 @@ public class DisplayItem
     /// true = 滚动完成后暂停，false = 滚动完成后循环重新开始。
     /// </summary>
     public bool PauseAfterScroll { get; set; } = true;
+
+    /// <summary>
+    /// 是否为长文本（需水平滚动）。通过 &lt;long&gt; 参数显式指定。
+    /// 仅对独立单句有效。
+    /// </summary>
+    public bool IsLongText { get; set; } = false;
 
     public override string ToString() => Text;
 }
