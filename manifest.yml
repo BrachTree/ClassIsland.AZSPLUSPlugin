@@ -4,7 +4,7 @@
 
 id: ClassIsland.AZSMYPlugin
 name: AZS.Plus For Classisland
-description: 支持从本地txt文件读取文本并轮播显示，支持多种过渡动画、长文本滚动、组句/混合句式及丰富的自定义选项。
+description: "AZS.Plus For Classisland 插件集，旨在为 ClassIsland 提供更多实用功能与个性化体验。目前已上线文本轮播功能：从本地 txt 文件读取文本并轮播显示，支持单句/组句/混合句式、五种过渡动画（淡入淡出、上下左右滚动）、长文本水平滚动（<long> 标记）、自定义颜色与时长、随机/顺序轮播。早期版本，可能存在些许问题。此插件由 AI 开发。"
 entranceAssembly: "ClassIsland.AZSMYPlugin.dll"
 url: https://github.com/BrachTree/ClassIsland.AZSPLUSPlugin
 version: 1.0.0.9
