@@ -18,9 +18,6 @@ namespace ClassIsland.AZSMYPlugin.Views;
 [ComponentInfo("A3F5E2B1-7C4D-4E8F-9A2B-5D1E7F3A6B8C", "文本轮播 - AZS.Plus", "\ue8a5", "从本地 txt 文件读取句子并轮播显示。")]
 public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 {
-    /// <summary>
-    /// 扁平化后的显示条目
-    /// </summary>
     private class DisplayEntry
     {
         public string Text { get; set; } = "";
@@ -29,15 +26,20 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         public bool UseTransition { get; set; } = false;
         public double ScrollSpeed { get; set; } = 0;
         public bool PauseAfterScroll { get; set; } = true;
-        /// <summary>
-        /// 是否为独立单句（非组内句子），只有独立单句才判定长文本滚动。
-        /// </summary>
         public bool IsSingleSentence { get; set; } = true;
-        /// <summary>
-        /// 所属帧索引。同帧的条目（前缀+组内句子）连续排列。
-        /// </summary>
         public int FrameIndex { get; set; } = 0;
+        /// <summary>
+        /// 紧贴前缀文本（固定显示），null 表示无前缀。
+        /// </summary>
+        public string? AttachedPrefixText { get; set; }
+        public Color AttachedPrefixColor { get; set; } = Colors.White;
+        /// <summary>
+        /// 该条目是否属于同一帧内且紧贴前缀帧的组内条目（前缀应保持显示）。
+        /// </summary>
+        public bool ShowAttachedPrefix { get; set; } = false;
     }
+
+    private const int LongTextCharThreshold = 40;
 
     private readonly List<DisplayEntry> _entries = new();
     private readonly Queue<int> _randomFramePlaylist = new();
@@ -45,64 +47,43 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private int _currentIndex = -1;
     private bool _isTransitioning = false;
 
-    // 垂直过渡动画用的位移变换
     private TranslateTransform? _textTransform;
-
-    // Y 属性过渡（垂直滚动/淡入淡出用）
     private static readonly Transitions YTransitions = new()
     {
         new DoubleTransition { Property = TranslateTransform.YProperty, Duration = TimeSpan.FromMilliseconds(300) }
     };
 
-    // === 水平滚动状态 ===
-    private readonly DispatcherTimer _scrollTimer = new()
-    {
-        Interval = TimeSpan.FromMilliseconds(16) // ~60fps
-    };
+    // 水平滚动状态
+    private readonly DispatcherTimer _scrollTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
     private DateTime _scrollStartTime;
     private double _scrollDistance = 0;
     private double _effectiveScrollSpeed = 50;
     private bool _scrollPausedAtEnd = false;
     private bool _isScrolling = false;
     private bool _isLongText = false;
-
-    /// <summary>
-    /// 长文本滚动完成后的信号。定时器检测到后切换下一条。
-    /// </summary>
     private bool _scrollFinished = false;
-
-    /// <summary>
-    /// 当前长文本条目是否为暂停模式（PauseAfterScroll=true）。
-    /// 暂停模式下 Timer 等滚动完成才切换；循环模式下 Timer 到期即切换。
-    /// </summary>
     private bool _isPauseMode = false;
 
-    private DispatcherTimer Timer { get; } = new()
-    {
-        Interval = TimeSpan.FromSeconds(5)
-    };
+    // 当前显示的紧贴前缀信息
+    private string? _currentAttachedPrefixText;
+    private Color _currentAttachedPrefixColor = Colors.White;
+
+    private DispatcherTimer Timer { get; } = new() { Interval = TimeSpan.FromSeconds(5) };
 
     public TextCyclerComponent()
     {
         InitializeComponent();
-
-        // 创建位移变换并应用到文本块
         _textTransform = new TranslateTransform();
         MainTextBlock.RenderTransform = _textTransform;
-
         _scrollTimer.Tick += OnScrollTick;
 
         AttachedToVisualTree += (_, _) =>
         {
             Settings.PropertyChanged += OnSettingsPropertyChanged;
             Settings.Frames.CollectionChanged += OnFramesCollectionChanged;
-
-            if (!Settings.IsLoaded)
-                Settings.LoadFromFile();
-
+            if (!Settings.IsLoaded) Settings.LoadFromFile();
             RebuildEntries();
             ShowFirst();
-
             Timer.Tick += OnTimerTick;
             StartTimer();
         };
@@ -121,38 +102,25 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(TextCyclerSettings.SlideMode))
-        {
             CreateRandomFramePlaylist();
-        }
         else if (e.PropertyName == nameof(TextCyclerSettings.DefaultDuration) ||
                  e.PropertyName == nameof(TextCyclerSettings.EnableTransition) ||
                  e.PropertyName == nameof(TextCyclerSettings.AnimationType))
         {
-            RebuildEntries();
-            ShowFirst();
-            StartTimer();
+            RebuildEntries(); ShowFirst(); StartTimer();
         }
         else if (e.PropertyName == nameof(TextCyclerSettings.DefaultScrollSpeed) ||
                  e.PropertyName == nameof(TextCyclerSettings.ContainerWidth))
         {
-            // 默认速度或容器宽度变更：保留原始 ScrollSpeed 值，重新判定长文本并重启
-            RebuildEntries();
-            ShowFirst();
-            StartTimer();
+            RebuildEntries(); ShowFirst(); StartTimer();
         }
     }
 
     private void OnFramesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        RebuildEntries();
-        ShowFirst();
-        StartTimer();
+        RebuildEntries(); ShowFirst(); StartTimer();
     }
 
-    /// <summary>
-    /// 从 Settings.Frames 重建扁平化显示条目列表。
-    /// 同帧的条目连续排列，记录每帧的起始索引用于帧级轮播。
-    /// </summary>
     private void RebuildEntries()
     {
         _entries.Clear();
@@ -163,7 +131,16 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             var frame = Settings.Frames[fi];
             _frameFirstIndices.Add(_entries.Count);
 
-            // 前缀单句：IsSingleSentence = true
+            // 紧贴前缀
+            string? attachedText = null;
+            Color attachedColor = Colors.White;
+            if (frame.HasAttachedPrefix)
+            {
+                attachedText = frame.AttachedPrefix!.Text;
+                attachedColor = frame.AttachedPrefix.Color;
+            }
+
+            // 前缀单句
             if (frame.HasPrefix && !string.IsNullOrWhiteSpace(frame.Prefix!.Text))
             {
                 _entries.Add(new DisplayEntry
@@ -179,15 +156,13 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                 });
             }
 
-            // 组内句子：IsSingleSentence = false，不判定长文本
+            // 组内句子
             if (frame.HasGroup)
             {
                 bool groupUseTransition = Settings.EnableTransition && !frame.DisableTransition;
-
                 foreach (var item in frame.GroupItems)
                 {
-                    if (string.IsNullOrWhiteSpace(item.Text))
-                        continue;
+                    if (string.IsNullOrWhiteSpace(item.Text)) continue;
                     _entries.Add(new DisplayEntry
                     {
                         Text = item.Text,
@@ -195,82 +170,53 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                         Duration = frame.PerItemDuration > 0 ? frame.PerItemDuration : Settings.DefaultDuration,
                         UseTransition = groupUseTransition,
                         IsSingleSentence = false,
-                        FrameIndex = fi
+                        FrameIndex = fi,
+                        AttachedPrefixText = attachedText,
+                        AttachedPrefixColor = attachedColor,
+                        ShowAttachedPrefix = attachedText != null
                     });
                 }
             }
         }
 
-        if (Settings.IsRandomOrder)
-            CreateRandomFramePlaylist();
-
+        if (Settings.IsRandomOrder) CreateRandomFramePlaylist();
         _currentIndex = -1;
     }
 
-    /// <summary>
-    /// 创建帧级别的随机播放列表（打乱帧顺序，帧内句子保持原序）。
-    /// </summary>
     private void CreateRandomFramePlaylist()
     {
         _randomFramePlaylist.Clear();
-        if (_frameFirstIndices.Count <= 0)
-            return;
-
+        if (_frameFirstIndices.Count <= 0) return;
         int[] frameList = new int[_frameFirstIndices.Count];
-        for (int i = 0; i < _frameFirstIndices.Count; i++)
-            frameList[i] = i;
-
+        for (int i = 0; i < _frameFirstIndices.Count; i++) frameList[i] = i;
         Random rand = new();
         rand.Shuffle(frameList);
-        foreach (var fi in frameList)
-            _randomFramePlaylist.Enqueue(fi);
+        foreach (var fi in frameList) _randomFramePlaylist.Enqueue(fi);
     }
 
-    /// <summary>
-    /// 获取下一个条目索引。
-    /// 逻辑：先检查同帧内是否有下一个条目（组内句子顺序切换），
-    /// 如果没有则切换到下一个帧（随机或顺序），返回该帧的第一个条目。
-    /// </summary>
     private int GetNextIndex()
     {
-        if (_entries.Count == 0)
-            return -1;
-        if (_entries.Count == 1)
-            return 0;
+        if (_entries.Count == 0) return -1;
+        if (_entries.Count == 1) return 0;
 
-        // 检查同帧内是否有下一个条目
         if (_currentIndex >= 0)
         {
             int currentFrame = _entries[_currentIndex].FrameIndex;
-            // 向后找同帧的下一个条目
             for (int i = _currentIndex + 1; i < _entries.Count; i++)
-            {
                 if (_entries[i].FrameIndex == currentFrame)
                     return i;
-            }
         }
-
-        // 当前帧已播完，切换到下一个帧
-        int nextFrameFirstIndex = GetNextFrameFirstIndex();
-        return nextFrameFirstIndex;
+        return GetNextFrameFirstIndex();
     }
 
-    /// <summary>
-    /// 获取下一个帧的第一个条目索引。
-    /// </summary>
     private int GetNextFrameFirstIndex()
     {
-        if (_frameFirstIndices.Count == 0)
-            return 0;
-
+        if (_frameFirstIndices.Count == 0) return 0;
         int currentFrame = _currentIndex >= 0 ? _entries[_currentIndex].FrameIndex : -1;
-
         if (Settings.IsRandomOrder)
         {
-            if (_randomFramePlaylist.Count <= 0)
-                CreateRandomFramePlaylist();
+            if (_randomFramePlaylist.Count <= 0) CreateRandomFramePlaylist();
             int nextFrame = _randomFramePlaylist.Dequeue();
-            // 避免连续播放同一帧
             if (nextFrame == currentFrame && _randomFramePlaylist.Count > 0)
             {
                 int fallback = _randomFramePlaylist.Dequeue();
@@ -279,8 +225,6 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             }
             return _frameFirstIndices[nextFrame];
         }
-
-        // 顺序模式
         int nextFrameIdx = (currentFrame + 1) % _frameFirstIndices.Count;
         return _frameFirstIndices[nextFrameIdx];
     }
@@ -288,25 +232,22 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private void ShowFirst()
     {
         StopHorizontalScroll();
-
         if (_entries.Count == 0)
         {
             MainTextBlock.Text = Settings.IsLoaded ? "（文件为空）" : "请选择文本文件…";
             MainTextBlock.Foreground = new SolidColorBrush(Colors.White);
+            PrefixTextBlock.IsVisible = false;
             return;
         }
 
         if (Settings.IsRandomOrder)
         {
-            if (_randomFramePlaylist.Count <= 0)
-                CreateRandomFramePlaylist();
+            if (_randomFramePlaylist.Count <= 0) CreateRandomFramePlaylist();
             int firstFrame = _randomFramePlaylist.Dequeue();
             _currentIndex = _frameFirstIndices[firstFrame];
         }
         else
-        {
             _currentIndex = 0;
-        }
 
         ApplyEntry(_entries[_currentIndex]);
         _ = StartHorizontalScrollIfNeededAsync(_entries[_currentIndex]);
@@ -314,34 +255,37 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     private async void OnTimerTick(object? sender, EventArgs e)
     {
-        if (_isTransitioning)
-            return;
-        if (_entries.Count == 0)
-            return;
-
-        // 长文本暂停模式：滚动未完成时跳过切换，等滚动完成后 Timer 才放行
-        // 长文本循环模式：不阻塞，显示时长到期即切换
-        if (_isLongText && _isPauseMode && !_scrollFinished)
-            return;
-
+        if (_isTransitioning || _entries.Count == 0) return;
+        if (_isLongText && _isPauseMode && !_scrollFinished) return;
         _currentIndex = GetNextIndex();
-        if (_currentIndex < 0 || _currentIndex >= _entries.Count)
-            return;
-
-        var entry = _entries[_currentIndex];
-        await ApplyEntryAsync(entry);
+        if (_currentIndex < 0 || _currentIndex >= _entries.Count) return;
+        await ApplyEntryAsync(_entries[_currentIndex]);
     }
 
-    // ========================================
-    //  垂直过渡动画
-    // ========================================
+    // === 前缀显示 ===
+
+    private void UpdateAttachedPrefix(string? text, Color color)
+    {
+        _currentAttachedPrefixText = text;
+        _currentAttachedPrefixColor = color;
+        if (text != null)
+        {
+            PrefixTextBlock.Text = text;
+            PrefixTextBlock.Foreground = new SolidColorBrush(color);
+            PrefixTextBlock.IsVisible = true;
+        }
+        else
+        {
+            PrefixTextBlock.IsVisible = false;
+        }
+    }
+
+    // === 垂直过渡动画 ===
 
     private double GetVerticalScrollDistance()
     {
         double h = MainTextBlock.Bounds.Height;
-        if (h > 0)
-            return h + 10;
-        return Settings.FontSize * 1.5;
+        return h > 0 ? h + 10 : Settings.FontSize * 1.5;
     }
 
     private void SetYAnimated(double value)
@@ -364,157 +308,139 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         _textTransform.X = value;
     }
 
+    /// <summary>
+    /// 根据条目时长计算过渡动画时长。短时长用更快的动画。
+    /// </summary>
+    private int GetTransitionDurationMs(double entryDuration)
+    {
+        if (entryDuration <= 0.5) return 80;
+        if (entryDuration <= 1.0) return 150;
+        if (entryDuration <= 2.0) return 200;
+        return 300;
+    }
+
     private async Task ApplyEntryAsync(DisplayEntry entry)
     {
         _isTransitioning = true;
         Timer.Stop();
         StopHorizontalScroll();
 
+        bool prefixChanged = entry.AttachedPrefixText != _currentAttachedPrefixText;
+
         try
         {
+            // 更新紧贴前缀
+            UpdateAttachedPrefix(entry.ShowAttachedPrefix ? entry.AttachedPrefixText : null,
+                                  entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White);
+
+            int transMs = GetTransitionDurationMs(entry.Duration);
+
             if (!entry.UseTransition)
             {
-                SetYInstant(0);
-                SetXInstant(0);
+                SetYInstant(0); SetXInstant(0);
                 MainTextBlock.Text = entry.Text;
                 MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
                 MainTextBlock.Opacity = 1;
-                await Task.Delay(50);
+                await Task.Delay(30);
+            }
+            else if (entry.ShowAttachedPrefix && !prefixChanged)
+            {
+                // 同帧组内切换：前缀不变，只淡入淡出主文本（更快）
+                MainTextBlock.Opacity = 0;
+                await Task.Delay(transMs);
+                MainTextBlock.Text = entry.Text;
+                MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
+                MainTextBlock.Opacity = 1;
+                await Task.Delay(transMs);
             }
             else
             {
                 switch (Settings.AnimationType)
                 {
-                    case 1:
-                        await ApplyScrollVerticalAsync(entry, scrollUp: true);
-                        break;
-                    case 2:
-                        await ApplyScrollVerticalAsync(entry, scrollUp: false);
-                        break;
-                    default:
-                        await ApplyFadeAsync(entry);
-                        break;
+                    case 1: await ApplyScrollVerticalAsync(entry, true, transMs); break;
+                    case 2: await ApplyScrollVerticalAsync(entry, false, transMs); break;
+                    default: await ApplyFadeAsync(entry, transMs); break;
                 }
             }
         }
-        finally
-        {
-            _isTransitioning = false;
-        }
+        finally { _isTransitioning = false; }
 
-        // 启动水平滚动（仅独立单句判定长文本）
         await StartHorizontalScrollIfNeededAsync(entry);
-
-        // 重新启动定时器
-        Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.5, entry.Duration));
+        Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.1, entry.Duration));
         Timer.Start();
     }
 
-    private async Task ApplyFadeAsync(DisplayEntry entry)
+    private async Task ApplyFadeAsync(DisplayEntry entry, int transMs)
     {
-        SetYInstant(0);
-        SetXInstant(0);
+        SetYInstant(0); SetXInstant(0);
         MainTextBlock.Opacity = 0;
-        await Task.Delay(300);
+        await Task.Delay(transMs);
         MainTextBlock.Text = entry.Text;
         MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
         MainTextBlock.Opacity = 1;
-        await Task.Delay(300);
+        await Task.Delay(transMs);
     }
 
-    private async Task ApplyScrollVerticalAsync(DisplayEntry entry, bool scrollUp)
+    private async Task ApplyScrollVerticalAsync(DisplayEntry entry, bool scrollUp, int transMs)
     {
         double scrollDist = GetVerticalScrollDistance();
         MainTextBlock.Opacity = 1;
-
-        // Step 1: 旧文本滚出
-        double outY = scrollUp ? -scrollDist : scrollDist;
-        SetYAnimated(outY);
-        await Task.Delay(300);
-
-        // Step 2: 更新内容
+        SetYAnimated(scrollUp ? -scrollDist : scrollDist);
+        await Task.Delay(transMs);
         MainTextBlock.Text = entry.Text;
         MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
-
-        // Step 3: 瞬间定位到对面
-        double inY = scrollUp ? scrollDist : -scrollDist;
-        SetYInstant(inY);
+        SetYInstant(scrollUp ? scrollDist : -scrollDist);
         SetXInstant(0);
-        await Task.Delay(50);
-
-        // Step 4: 滚入
+        await Task.Delay(30);
         SetYAnimated(0);
-        await Task.Delay(300);
+        await Task.Delay(transMs);
     }
 
-    // ========================================
-    //  水平滚动（仅独立单句）
-    // ========================================
+    // === 水平滚动（仅独立单句） ===
 
-    /// <summary>
-    /// 测量文本的自然宽度（不受容器约束）。
-    /// </summary>
     private double MeasureTextWidth()
     {
         MainTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         return MainTextBlock.DesiredSize.Width;
     }
 
-    /// <summary>
-    /// 仅对独立单句判定长文本并启动滚动。组内句子不判定。
-    /// 判定标准：文本自然宽度超过组件实际渲染宽度。
-    /// </summary>
     private async Task StartHorizontalScrollIfNeededAsync(DisplayEntry entry)
     {
         _isLongText = false;
         _scrollFinished = false;
         _isPauseMode = false;
-
-        // 先清除容器固定宽度，让 ScrollViewer 自适应内容
         Dispatcher.UIThread.Post(() => { ContainerScroll.Width = double.NaN; });
 
-        // 组内句子不判定长文本
-        if (!entry.IsSingleSentence)
-        {
-            SetXInstant(0);
-            _isScrolling = false;
-            return;
-        }
+        if (!entry.IsSingleSentence) { SetXInstant(0); _isScrolling = false; return; }
 
-        // 等待布局完成
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
 
-        // 使用组件实际渲染宽度作为判定基准；若尚未布局则回退到设置值
+        // 长文本判定：字符数超过阈值（仅独立单句）
+        if (entry.Text.Length <= LongTextCharThreshold)
+        {
+            SetXInstant(0); _isScrolling = false; return;
+        }
+
         double containerWidth = Bounds.Width > 0 ? Bounds.Width : Settings.ContainerWidth;
         double textWidth = MeasureTextWidth();
 
         if (textWidth <= containerWidth + 1)
         {
-            // 短文本：不需要滚动，ScrollViewer 自适应文本宽度
-            SetXInstant(0);
-            _isScrolling = false;
-            return;
+            SetXInstant(0); _isScrolling = false; return;
         }
 
-        // 长文本：固定 ScrollViewer 宽度作为视窗，TextBlock 完整渲染后通过 TranslateTransform 移动
-        // ClipToBounds 裁剪超出 Viewport 的内容
         Dispatcher.UIThread.Post(() => { ContainerScroll.Width = containerWidth; });
-
-        // 等待宽度生效后重新测量
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
         textWidth = MeasureTextWidth();
 
         _isLongText = true;
         _isPauseMode = entry.PauseAfterScroll;
         _scrollDistance = textWidth - containerWidth;
-        // ScrollSpeed=0 表示文件中未指定，使用组件设置中的默认速度
         _effectiveScrollSpeed = entry.ScrollSpeed > 0 ? entry.ScrollSpeed : Settings.DefaultScrollSpeed;
         _scrollPausedAtEnd = false;
         _scrollStartTime = DateTime.UtcNow;
         _isScrolling = true;
-
         SetXInstant(0);
-
         _scrollTimer.Interval = TimeSpan.FromMilliseconds(16);
         _scrollTimer.Start();
     }
@@ -522,65 +448,45 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private void StopHorizontalScroll()
     {
         _scrollTimer.Stop();
-        _isScrolling = false;
-        _isLongText = false;
-        _scrollPausedAtEnd = false;
-        _scrollFinished = false;
-        _isPauseMode = false;
+        _isScrolling = false; _isLongText = false;
+        _scrollPausedAtEnd = false; _scrollFinished = false; _isPauseMode = false;
         SetXInstant(0);
-        // 清除固定宽度，让下一次重新设置
         Dispatcher.UIThread.Post(() => { ContainerScroll.Width = double.NaN; });
     }
 
     private void OnScrollTick(object? sender, EventArgs e)
     {
-        if (!_isScrolling || _textTransform == null)
-            return;
-
-        if (_scrollPausedAtEnd)
-            return;
-
-        var now = DateTime.UtcNow;
-        double elapsed = (now - _scrollStartTime).TotalSeconds;
+        if (!_isScrolling || _textTransform == null || _scrollPausedAtEnd) return;
+        double elapsed = (DateTime.UtcNow - _scrollStartTime).TotalSeconds;
         double offset = elapsed * _effectiveScrollSpeed;
 
         if (offset >= _scrollDistance)
         {
             SetXInstant(-_scrollDistance);
-
             if (_entries.Count > 0 && _currentIndex >= 0 && _currentIndex < _entries.Count)
             {
                 var entry = _entries[_currentIndex];
                 if (entry.PauseAfterScroll)
                 {
-                    // 暂停模式：滚动完成，从此时开始重新计时显示时长
-                    _scrollPausedAtEnd = true;
-                    _scrollFinished = true;
-                    // 重新启动 Timer，让显示时长从滚动完成开始算
+                    _scrollPausedAtEnd = true; _scrollFinished = true;
                     Timer.Stop();
                     Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.5, entry.Duration));
                     Timer.Start();
                 }
                 else
                 {
-                    // 循环模式：等1秒后重新开始
                     _scrollPausedAtEnd = true;
                     _ = ResetScrollAfterDelayAsync(1000);
                 }
             }
         }
-        else
-        {
-            SetXInstant(-offset);
-        }
+        else SetXInstant(-offset);
     }
 
     private async Task ResetScrollAfterDelayAsync(int delayMs)
     {
         await Task.Delay(delayMs);
-        if (!_isScrolling)
-            return;
-
+        if (!_isScrolling) return;
         _scrollStartTime = DateTime.UtcNow;
         _scrollPausedAtEnd = false;
         SetXInstant(0);
@@ -588,8 +494,9 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     private void ApplyEntry(DisplayEntry entry)
     {
-        SetYInstant(0);
-        SetXInstant(0);
+        SetYInstant(0); SetXInstant(0);
+        UpdateAttachedPrefix(entry.ShowAttachedPrefix ? entry.AttachedPrefixText : null,
+                              entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White);
         MainTextBlock.Text = entry.Text;
         MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
         MainTextBlock.Opacity = 1;
@@ -597,14 +504,11 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     private void StartTimer()
     {
-        if (_entries.Count == 0)
-            return;
-
+        if (_entries.Count == 0) return;
         double duration = 5.0;
         if (_currentIndex >= 0 && _currentIndex < _entries.Count)
             duration = _entries[_currentIndex].Duration;
-
-        Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.5, duration));
+        Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.1, duration));
         Timer.Stop();
         Timer.Start();
     }

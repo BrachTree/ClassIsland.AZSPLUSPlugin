@@ -11,6 +11,12 @@ public class DisplayFrame
     public DisplayItem? Prefix { get; set; }
 
     /// <summary>
+    /// 紧贴前缀文本（可选）。紧贴模式（[ 前无空格）时，前缀文本单独存储在此，
+    /// 组内句子轮播时前缀始终固定显示不变。
+    /// </summary>
+    public DisplayItem? AttachedPrefix { get; set; }
+
+    /// <summary>
     /// 组内句子列表（可选）。对应 "[句子1 句子2 ...]" 部分。
     /// </summary>
     public List<DisplayItem> GroupItems { get; set; } = new();
@@ -45,6 +51,11 @@ public class DisplayFrame
     /// 是否包含前缀单句（Prefix 不为 null 且文本非空）
     /// </summary>
     public bool HasPrefix => Prefix != null && !string.IsNullOrWhiteSpace(Prefix.Text);
+
+    /// <summary>
+    /// 是否包含紧贴前缀（AttachedPrefix 不为 null 且文本非空）
+    /// </summary>
+    public bool HasAttachedPrefix => AttachedPrefix != null && !string.IsNullOrWhiteSpace(AttachedPrefix.Text);
 
     /// <summary>
     /// 获取此帧的总显示时长（秒），用于主轮播定时器。

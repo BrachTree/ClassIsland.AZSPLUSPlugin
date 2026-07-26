@@ -9,26 +9,36 @@
                         xmlns:componentSettings="clr-namespace:ClassIsland.AZSMYPlugin.Models.ComponentSettings"
                         mc:Ignorable="d"
                         d:DesignHeight="60" d:DesignWidth="350">
-    <ScrollViewer x:Name="ContainerScroll"
-                  HorizontalScrollBarVisibility="Hidden"
-                  VerticalScrollBarVisibility="Disabled"
-                  HorizontalAlignment="Left"
-                  VerticalAlignment="Center"
-                  ClipToBounds="True"
-                  IsHitTestVisible="False"
-                  DataContext="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=local:TextCyclerComponent}}">
-        <TextBlock x:Name="MainTextBlock"
-                   Text="请选择文本文件…"
+    <StackPanel x:Name="RootPanel" Orientation="Horizontal"
+                VerticalAlignment="Center"
+                DataContext="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=local:TextCyclerComponent}}">
+        <TextBlock x:Name="PrefixTextBlock"
+                   Text=""
                    FontSize="{Binding Settings.FontSize}"
-                   HorizontalAlignment="Left"
                    VerticalAlignment="Center"
                    TextWrapping="NoWrap"
-                   Opacity="1">
-            <TextBlock.Transitions>
-                <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.3"/>
-                </Transitions>
-            </TextBlock.Transitions>
-        </TextBlock>
-    </ScrollViewer>
+                   Opacity="1"
+                   IsVisible="False" />
+        <ScrollViewer x:Name="ContainerScroll"
+                      HorizontalScrollBarVisibility="Hidden"
+                      VerticalScrollBarVisibility="Disabled"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Center"
+                      ClipToBounds="True"
+                      IsHitTestVisible="False">
+            <TextBlock x:Name="MainTextBlock"
+                       Text="请选择文本文件…"
+                       FontSize="{Binding Settings.FontSize}"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       Opacity="1">
+                <TextBlock.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.3"/>
+                    </Transitions>
+                </TextBlock.Transitions>
+            </TextBlock>
+        </ScrollViewer>
+    </StackPanel>
 </controls:ComponentBase>
