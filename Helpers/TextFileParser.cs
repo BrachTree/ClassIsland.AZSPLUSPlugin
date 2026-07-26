@@ -106,27 +106,40 @@ public static class TextFileParser
     {
         var frame = new DisplayFrame();
 
-        // 前缀部分
-        string prefixPart = line.Substring(0, bracketIndex).Trim();
-        if (!string.IsNullOrWhiteSpace(prefixPart))
-        {
-            var (text, duration, color, scrollSpeed, pauseAfterScroll) = ExtractTextAndParams(prefixPart, 0);
-            frame.Prefix = new DisplayItem
-            {
-                Text = ReplaceUnderscores(text),
-                Color = color,
-                Duration = duration,
-                ScrollSpeed = scrollSpeed,
-                PauseAfterScroll = pauseAfterScroll
-            };
-        }
-
-        // 组部分
+        // 判断 [ 前面是否有空格分隔。
+        // 如果紧贴 [ 没有空格（如 Xiaomi_Hyper[...]），
+        // 将前面的文本视为组内第一个句子的一部分（纯组），而非前缀。
         int closeBracket = line.IndexOf(']', bracketIndex);
         if (closeBracket < 0)
             closeBracket = line.Length;
 
-        string groupContent = line.Substring(bracketIndex + 1, closeBracket - bracketIndex - 1).Trim();
+        string prefixPart = line.Substring(0, bracketIndex).Trim();
+        string groupContent;
+
+        if (!string.IsNullOrWhiteSpace(prefixPart) && bracketIndex > 0 && !char.IsWhiteSpace(line[bracketIndex - 1]))
+        {
+            // [ 前文本紧贴 [，将其归入组内：拼接到组内容前面
+            string originalGroupContent = line.Substring(bracketIndex + 1, closeBracket - bracketIndex - 1).Trim();
+            groupContent = prefixPart + " " + originalGroupContent;
+        }
+        else
+        {
+            // [ 前有空格或行以 [ 开头，按正常前缀+组处理
+            groupContent = line.Substring(bracketIndex + 1, closeBracket - bracketIndex - 1).Trim();
+            if (!string.IsNullOrWhiteSpace(prefixPart))
+            {
+                var (text, duration, color, scrollSpeed, pauseAfterScroll) = ExtractTextAndParams(prefixPart, 0);
+                frame.Prefix = new DisplayItem
+                {
+                    Text = ReplaceUnderscores(text),
+                    Color = color,
+                    Duration = duration,
+                    ScrollSpeed = scrollSpeed,
+                    PauseAfterScroll = pauseAfterScroll
+                };
+            }
+        }
+
         ParseGroup(groupContent, frame);
 
         if (!frame.HasPrefix && !frame.HasGroup)
