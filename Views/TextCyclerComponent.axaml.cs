@@ -309,14 +309,14 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     }
 
     /// <summary>
-    /// 根据条目时长计算过渡动画时长。短时长用更快的动画。
+    /// 根据条目时长计算过渡动画时长。动画时长不超过显示时长的40%。
     /// </summary>
     private int GetTransitionDurationMs(double entryDuration)
     {
-        if (entryDuration <= 0.5) return 80;
-        if (entryDuration <= 1.0) return 150;
-        if (entryDuration <= 2.0) return 200;
-        return 300;
+        int maxMs = (int)(entryDuration * 1000 * 0.4);
+        if (maxMs < 100) maxMs = 100;
+        if (maxMs > 300) maxMs = 300;
+        return maxMs;
     }
 
     private async Task ApplyEntryAsync(DisplayEntry entry)
@@ -325,8 +325,6 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         Timer.Stop();
         StopHorizontalScroll();
 
-        bool prefixChanged = entry.AttachedPrefixText != _currentAttachedPrefixText;
-
         try
         {
             // 更新紧贴前缀
@@ -334,6 +332,10 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                                   entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White);
 
             int transMs = GetTransitionDurationMs(entry.Duration);
+
+            // 立即启动 Timer，显示时长包含动画时间
+            Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.1, entry.Duration));
+            Timer.Start();
 
             if (!entry.UseTransition)
             {
@@ -356,8 +358,6 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         finally { _isTransitioning = false; }
 
         await StartHorizontalScrollIfNeededAsync(entry);
-        Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.1, entry.Duration));
-        Timer.Start();
     }
 
     private async Task ApplyFadeAsync(DisplayEntry entry, int transMs)
@@ -382,15 +382,32 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     private async Task ApplyScrollVerticalAsync(DisplayEntry entry, bool scrollUp, int transMs)
     {
+        // 连续滚动：旧文本从中间滚出，新文本同时从另一侧滚入，无缝衔接
         double scrollDist = GetVerticalScrollDistance();
         MainTextBlock.Opacity = 1;
-        SetYAnimated(scrollUp ? -scrollDist : scrollDist);
+
+        // 同步 Y 过渡时长
+        if (_textTransform != null)
+        {
+            foreach (var t in YTransitions)
+            {
+                if (t is DoubleTransition dt)
+                    dt.Duration = TimeSpan.FromMilliseconds(transMs);
+            }
+        }
+
+        // Step 1: 旧文本滚出 + 新文本从另一侧滚入（一步到位）
+        double outY = scrollUp ? -scrollDist : scrollDist;
+        SetYAnimated(outY);
         await Task.Delay(transMs);
+
+        // Step 2: 在滚动到位的瞬间切换文本，并瞬间定位到对面
         MainTextBlock.Text = entry.Text;
         MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
         SetYInstant(scrollUp ? scrollDist : -scrollDist);
         SetXInstant(0);
-        await Task.Delay(30);
+
+        // Step 3: 新文本滚入到中心（无缝衔接，无额外停顿）
         SetYAnimated(0);
         await Task.Delay(transMs);
     }
