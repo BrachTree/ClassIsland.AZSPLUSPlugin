@@ -101,37 +101,45 @@ public static class TextFileParser
 
     /// <summary>
     /// 解析包含组的行（可能同时包含前缀单句）。
+    /// 紧贴模式（[ 前无空格）：前缀文本合并到组内第一个句子前面，一起显示。
+    /// 正常模式（[ 前有空格）：前缀作为独立单句先显示，再轮播组内句子。
     /// </summary>
     private static DisplayFrame? ParseCombinedLine(string line, int bracketIndex)
     {
         var frame = new DisplayFrame();
 
-        // 判断 [ 前面是否有空格分隔。
-        // 如果紧贴 [ 没有空格（如 Xiaomi_Hyper[...]），
-        // 将前面的文本视为组内第一个句子的一部分（纯组），而非前缀。
         int closeBracket = line.IndexOf(']', bracketIndex);
         if (closeBracket < 0)
             closeBracket = line.Length;
 
         string prefixPart = line.Substring(0, bracketIndex).Trim();
-        string groupContent;
+        string groupContent = line.Substring(bracketIndex + 1, closeBracket - bracketIndex - 1).Trim();
 
-        if (!string.IsNullOrWhiteSpace(prefixPart) && bracketIndex > 0 && !char.IsWhiteSpace(line[bracketIndex - 1]))
+        // 先解析组内容
+        ParseGroup(groupContent, frame);
+
+        if (!string.IsNullOrWhiteSpace(prefixPart))
         {
-            // [ 前文本紧贴 [，将其归入组内：拼接到组内容前面
-            string originalGroupContent = line.Substring(bracketIndex + 1, closeBracket - bracketIndex - 1).Trim();
-            groupContent = prefixPart + " " + originalGroupContent;
-        }
-        else
-        {
-            // [ 前有空格或行以 [ 开头，按正常前缀+组处理
-            groupContent = line.Substring(bracketIndex + 1, closeBracket - bracketIndex - 1).Trim();
-            if (!string.IsNullOrWhiteSpace(prefixPart))
+            var (text, duration, color, scrollSpeed, pauseAfterScroll) = ExtractTextAndParams(prefixPart, 0);
+            var prefixText = ReplaceUnderscores(text);
+
+            // 判断 [ 前面是否有空格分隔
+            bool attached = bracketIndex > 0 && !char.IsWhiteSpace(line[bracketIndex - 1]);
+
+            if (attached && frame.HasGroup && !string.IsNullOrWhiteSpace(prefixText))
             {
-                var (text, duration, color, scrollSpeed, pauseAfterScroll) = ExtractTextAndParams(prefixPart, 0);
+                // 紧贴模式：前缀文本合并到第一个组内句子前面，一起显示
+                frame.GroupItems[0].Text = prefixText + " " + frame.GroupItems[0].Text;
+                // 若第一个组内句子未指定颜色（白色），使用前缀的颜色
+                if (frame.GroupItems[0].Color == Colors.White && color != Colors.White)
+                    frame.GroupItems[0].Color = color;
+            }
+            else
+            {
+                // 正常模式：前缀作为独立单句
                 frame.Prefix = new DisplayItem
                 {
-                    Text = ReplaceUnderscores(text),
+                    Text = prefixText,
                     Color = color,
                     Duration = duration,
                     ScrollSpeed = scrollSpeed,
@@ -139,8 +147,6 @@ public static class TextFileParser
                 };
             }
         }
-
-        ParseGroup(groupContent, frame);
 
         if (!frame.HasPrefix && !frame.HasGroup)
             return null;
