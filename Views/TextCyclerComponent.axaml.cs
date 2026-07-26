@@ -126,11 +126,16 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         }
         else if (e.PropertyName == nameof(TextCyclerSettings.DefaultDuration) ||
                  e.PropertyName == nameof(TextCyclerSettings.EnableTransition) ||
-                 e.PropertyName == nameof(TextCyclerSettings.AnimationType) ||
-                 e.PropertyName == nameof(TextCyclerSettings.DefaultScrollSpeed) ||
+                 e.PropertyName == nameof(TextCyclerSettings.AnimationType))
+        {
+            RebuildEntries();
+            ShowFirst();
+            StartTimer();
+        }
+        else if (e.PropertyName == nameof(TextCyclerSettings.DefaultScrollSpeed) ||
                  e.PropertyName == nameof(TextCyclerSettings.ContainerWidth))
         {
-            // 宽度由 StartHorizontalScrollIfNeededAsync 动态设置
+            // 默认速度或容器宽度变更：保留原始 ScrollSpeed 值，重新判定长文本并重启
             RebuildEntries();
             ShowFirst();
             StartTimer();
@@ -167,7 +172,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                     Color = frame.Prefix.Color,
                     Duration = frame.Prefix.Duration > 0 ? frame.Prefix.Duration : Settings.DefaultDuration,
                     UseTransition = Settings.EnableTransition,
-                    ScrollSpeed = frame.Prefix.ScrollSpeed > 0 ? frame.Prefix.ScrollSpeed : Settings.DefaultScrollSpeed,
+                    ScrollSpeed = frame.Prefix.ScrollSpeed,
                     PauseAfterScroll = frame.Prefix.PauseAfterScroll,
                     IsSingleSentence = true,
                     FrameIndex = fi
@@ -457,6 +462,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     /// <summary>
     /// 仅对独立单句判定长文本并启动滚动。组内句子不判定。
+    /// 判定标准：文本自然宽度超过组件实际渲染宽度。
     /// </summary>
     private async Task StartHorizontalScrollIfNeededAsync(DisplayEntry entry)
     {
@@ -478,7 +484,8 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         // 等待布局完成
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
 
-        double containerWidth = Settings.ContainerWidth;
+        // 使用组件实际渲染宽度作为判定基准；若尚未布局则回退到设置值
+        double containerWidth = Bounds.Width > 0 ? Bounds.Width : Settings.ContainerWidth;
         double textWidth = MeasureTextWidth();
 
         if (textWidth <= containerWidth + 1)
@@ -490,7 +497,6 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         }
 
         // 长文本：固定 ScrollViewer 宽度作为视窗，TextBlock 完整渲染后通过 TranslateTransform 移动
-        // ScrollViewer 给 Content 的 Arrange 矩形等于 Content 的 DesiredSize（不受 Viewport 限制）
         // ClipToBounds 裁剪超出 Viewport 的内容
         Dispatcher.UIThread.Post(() => { ContainerScroll.Width = containerWidth; });
 
@@ -501,6 +507,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         _isLongText = true;
         _isPauseMode = entry.PauseAfterScroll;
         _scrollDistance = textWidth - containerWidth;
+        // ScrollSpeed=0 表示文件中未指定，使用组件设置中的默认速度
         _effectiveScrollSpeed = entry.ScrollSpeed > 0 ? entry.ScrollSpeed : Settings.DefaultScrollSpeed;
         _scrollPausedAtEnd = false;
         _scrollStartTime = DateTime.UtcNow;
