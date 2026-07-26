@@ -42,9 +42,9 @@ public class DisplayFrame
     public bool HasGroup => GroupItems.Count > 0;
 
     /// <summary>
-    /// 是否包含前缀单句
+    /// 是否包含前缀单句（Prefix 不为 null 且文本非空）
     /// </summary>
-    public bool HasPrefix => Prefix != null;
+    public bool HasPrefix => Prefix != null && !string.IsNullOrWhiteSpace(Prefix.Text);
 
     /// <summary>
     /// 获取此帧的总显示时长（秒），用于主轮播定时器。

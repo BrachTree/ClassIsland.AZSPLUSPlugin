@@ -33,10 +33,15 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         /// 是否为独立单句（非组内句子），只有独立单句才判定长文本滚动。
         /// </summary>
         public bool IsSingleSentence { get; set; } = true;
+        /// <summary>
+        /// 所属帧索引。同帧的条目（前缀+组内句子）连续排列。
+        /// </summary>
+        public int FrameIndex { get; set; } = 0;
     }
 
     private readonly List<DisplayEntry> _entries = new();
-    private readonly Queue<int> _randomPlaylist = new();
+    private readonly Queue<int> _randomFramePlaylist = new();
+    private readonly List<int> _frameFirstIndices = new();
     private int _currentIndex = -1;
     private bool _isTransitioning = false;
 
@@ -117,7 +122,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     {
         if (e.PropertyName == nameof(TextCyclerSettings.SlideMode))
         {
-            CreateRandomPlaylist();
+            CreateRandomFramePlaylist();
         }
         else if (e.PropertyName == nameof(TextCyclerSettings.DefaultDuration) ||
                  e.PropertyName == nameof(TextCyclerSettings.EnableTransition) ||
@@ -141,13 +146,18 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     /// <summary>
     /// 从 Settings.Frames 重建扁平化显示条目列表。
+    /// 同帧的条目连续排列，记录每帧的起始索引用于帧级轮播。
     /// </summary>
     private void RebuildEntries()
     {
         _entries.Clear();
+        _frameFirstIndices.Clear();
 
-        foreach (var frame in Settings.Frames)
+        for (int fi = 0; fi < Settings.Frames.Count; fi++)
         {
+            var frame = Settings.Frames[fi];
+            _frameFirstIndices.Add(_entries.Count);
+
             // 前缀单句：IsSingleSentence = true
             if (frame.HasPrefix && !string.IsNullOrWhiteSpace(frame.Prefix!.Text))
             {
@@ -159,7 +169,8 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                     UseTransition = Settings.EnableTransition,
                     ScrollSpeed = frame.Prefix.ScrollSpeed > 0 ? frame.Prefix.ScrollSpeed : Settings.DefaultScrollSpeed,
                     PauseAfterScroll = frame.Prefix.PauseAfterScroll,
-                    IsSingleSentence = true
+                    IsSingleSentence = true,
+                    FrameIndex = fi
                 });
             }
 
@@ -178,34 +189,43 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                         Color = item.Color,
                         Duration = frame.PerItemDuration > 0 ? frame.PerItemDuration : Settings.DefaultDuration,
                         UseTransition = groupUseTransition,
-                        IsSingleSentence = false
+                        IsSingleSentence = false,
+                        FrameIndex = fi
                     });
                 }
             }
         }
 
         if (Settings.IsRandomOrder)
-            CreateRandomPlaylist();
+            CreateRandomFramePlaylist();
 
         _currentIndex = -1;
     }
 
-    private void CreateRandomPlaylist()
+    /// <summary>
+    /// 创建帧级别的随机播放列表（打乱帧顺序，帧内句子保持原序）。
+    /// </summary>
+    private void CreateRandomFramePlaylist()
     {
-        _randomPlaylist.Clear();
-        if (_entries.Count <= 0)
+        _randomFramePlaylist.Clear();
+        if (_frameFirstIndices.Count <= 0)
             return;
 
-        int[] list = new int[_entries.Count];
-        for (int i = 0; i < _entries.Count; i++)
-            list[i] = i;
+        int[] frameList = new int[_frameFirstIndices.Count];
+        for (int i = 0; i < _frameFirstIndices.Count; i++)
+            frameList[i] = i;
 
         Random rand = new();
-        rand.Shuffle(list);
-        foreach (var i in list)
-            _randomPlaylist.Enqueue(i);
+        rand.Shuffle(frameList);
+        foreach (var fi in frameList)
+            _randomFramePlaylist.Enqueue(fi);
     }
 
+    /// <summary>
+    /// 获取下一个条目索引。
+    /// 逻辑：先检查同帧内是否有下一个条目（组内句子顺序切换），
+    /// 如果没有则切换到下一个帧（随机或顺序），返回该帧的第一个条目。
+    /// </summary>
     private int GetNextIndex()
     {
         if (_entries.Count == 0)
@@ -213,14 +233,51 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         if (_entries.Count == 1)
             return 0;
 
-        if (Settings.IsRandomOrder)
+        // 检查同帧内是否有下一个条目
+        if (_currentIndex >= 0)
         {
-            if (_randomPlaylist.Count <= 0)
-                CreateRandomPlaylist();
-            return _randomPlaylist.Dequeue();
+            int currentFrame = _entries[_currentIndex].FrameIndex;
+            // 向后找同帧的下一个条目
+            for (int i = _currentIndex + 1; i < _entries.Count; i++)
+            {
+                if (_entries[i].FrameIndex == currentFrame)
+                    return i;
+            }
         }
 
-        return (_currentIndex + 1) % _entries.Count;
+        // 当前帧已播完，切换到下一个帧
+        int nextFrameFirstIndex = GetNextFrameFirstIndex();
+        return nextFrameFirstIndex;
+    }
+
+    /// <summary>
+    /// 获取下一个帧的第一个条目索引。
+    /// </summary>
+    private int GetNextFrameFirstIndex()
+    {
+        if (_frameFirstIndices.Count == 0)
+            return 0;
+
+        int currentFrame = _currentIndex >= 0 ? _entries[_currentIndex].FrameIndex : -1;
+
+        if (Settings.IsRandomOrder)
+        {
+            if (_randomFramePlaylist.Count <= 0)
+                CreateRandomFramePlaylist();
+            int nextFrame = _randomFramePlaylist.Dequeue();
+            // 避免连续播放同一帧
+            if (nextFrame == currentFrame && _randomFramePlaylist.Count > 0)
+            {
+                int fallback = _randomFramePlaylist.Dequeue();
+                _randomFramePlaylist.Enqueue(nextFrame);
+                nextFrame = fallback;
+            }
+            return _frameFirstIndices[nextFrame];
+        }
+
+        // 顺序模式
+        int nextFrameIdx = (currentFrame + 1) % _frameFirstIndices.Count;
+        return _frameFirstIndices[nextFrameIdx];
     }
 
     private void ShowFirst()
@@ -236,9 +293,10 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
         if (Settings.IsRandomOrder)
         {
-            if (_randomPlaylist.Count <= 0)
-                CreateRandomPlaylist();
-            _currentIndex = _randomPlaylist.Dequeue();
+            if (_randomFramePlaylist.Count <= 0)
+                CreateRandomFramePlaylist();
+            int firstFrame = _randomFramePlaylist.Dequeue();
+            _currentIndex = _frameFirstIndices[firstFrame];
         }
         else
         {
