@@ -7,6 +7,6 @@ name: AZS.Plus For Classisland
 description: 目前支持从本地txt文件读取名言并轮播显示，支持自定义。
 entranceAssembly: "ClassIsland.AZSMYPlugin.dll"
 url: https://github.com/AZ04A/ClassIsland.AZSMYPlugin
-version: 1.0.0.1
+version: 1.0.0.2
 apiVersion: 2.0.0.0
 author: AZS3604

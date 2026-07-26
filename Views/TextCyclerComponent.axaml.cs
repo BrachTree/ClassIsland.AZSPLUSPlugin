@@ -343,16 +343,6 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                 MainTextBlock.Opacity = 1;
                 await Task.Delay(30);
             }
-            else if (entry.ShowAttachedPrefix && !prefixChanged)
-            {
-                // 同帧组内切换：前缀不变，只淡入淡出主文本（更快）
-                MainTextBlock.Opacity = 0;
-                await Task.Delay(transMs);
-                MainTextBlock.Text = entry.Text;
-                MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
-                MainTextBlock.Opacity = 1;
-                await Task.Delay(transMs);
-            }
             else
             {
                 switch (Settings.AnimationType)
@@ -373,6 +363,15 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private async Task ApplyFadeAsync(DisplayEntry entry, int transMs)
     {
         SetYInstant(0); SetXInstant(0);
+        // 同步 opacity 过渡时长与 transMs
+        if (MainTextBlock.Transitions != null)
+        {
+            foreach (var t in MainTextBlock.Transitions)
+            {
+                if (t is DoubleTransition dt)
+                    dt.Duration = TimeSpan.FromMilliseconds(transMs);
+            }
+        }
         MainTextBlock.Opacity = 0;
         await Task.Delay(transMs);
         MainTextBlock.Text = entry.Text;
