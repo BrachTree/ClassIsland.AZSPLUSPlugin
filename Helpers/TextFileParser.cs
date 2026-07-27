@@ -258,11 +258,16 @@ public static class TextFileParser
         line = line.Trim();
 
         // 从末尾收集所有 <参数>
+        // 要求 <参数> 前面有空格或位于行首，避免附着在文本末尾的内容被误解析为参数
         var paramList = new List<string>();
         while (true)
         {
             var match = TrailingParamRegex.Match(line);
             if (!match.Success)
+                break;
+
+            // 若 <参数> 前面没有空格且不是行首，说明附着在文本上，停止提取
+            if (match.Index > 0 && !char.IsWhiteSpace(line[match.Index - 1]))
                 break;
 
             string param = match.Value.Trim();
@@ -416,19 +421,9 @@ public static class TextFileParser
         switch (str)
         {
             case "true":
-            case "1":
-            case "yes":
-            case "是":
-            case "禁用":
-            case "暂停":
                 result = true;
                 return true;
             case "false":
-            case "0":
-            case "no":
-            case "否":
-            case "跟随":
-            case "循环":
                 result = false;
                 return true;
             default:

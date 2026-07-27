@@ -464,6 +464,9 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         // Step 3: 新文本滚入到中心
         SetYAnimated(0);
         await Task.Delay(transMs);
+
+        // 动画完成后清除过渡，避免干扰后续滚动
+        if (_textTransform != null) _textTransform.Transitions = null;
     }
 
     /// <summary>
@@ -487,6 +490,9 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         // Step 3: 新文本从另一侧滚入到中心
         SetXAnimated(0, transMs);
         await Task.Delay(transMs);
+
+        // 动画完成后清除过渡，避免干扰后续水平滚动
+        if (_textTransform != null) _textTransform.Transitions = null;
     }
 
     /// <summary>
@@ -511,6 +517,10 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         _isLongText = false;
         _scrollFinished = false;
         _isPauseMode = false;
+        _scrollDistance = 0;
+        _effectiveScrollSpeed = 0;
+        // 清除可能残留的过渡动画，避免干扰水平滚动
+        if (_textTransform != null) _textTransform.Transitions = null;
         Dispatcher.UIThread.Post(() => { ContainerScroll.MaxWidth = double.PositiveInfinity; });
 
         if (!entry.IsSingleSentence) { SetXInstant(0); _isScrolling = false; return; }
@@ -553,7 +563,10 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         _scrollTimer.Stop();
         _isScrolling = false; _isLongText = false;
         _scrollPausedAtEnd = false; _scrollFinished = false; _isPauseMode = false;
+        _scrollDistance = 0; _effectiveScrollSpeed = 0;
         SetXInstant(0);
+        // 清除残留过渡动画
+        if (_textTransform != null) _textTransform.Transitions = null;
         Dispatcher.UIThread.Post(() => { ContainerScroll.MaxWidth = double.PositiveInfinity; });
     }
 
@@ -570,12 +583,13 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             {
                 var entry = _entries[_currentIndex];
                 if (entry.PauseAfterScroll)
-                {
-                    _scrollPausedAtEnd = true; _scrollFinished = true;
-                    Timer.Stop();
-                    Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.5, entry.Duration));
-                    Timer.Start();
-                }
+            {
+                _scrollTimer.Stop(); // 滚动完成，停止滚动定时器
+                _scrollPausedAtEnd = true; _scrollFinished = true;
+                Timer.Stop();
+                Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.5, entry.Duration));
+                Timer.Start();
+            }
                 else
                 {
                     _scrollPausedAtEnd = true;
