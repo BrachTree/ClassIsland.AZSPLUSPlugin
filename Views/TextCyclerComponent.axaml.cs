@@ -274,6 +274,13 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     {
         if (_isTransitioning || _entries.Count == 0) return;
         if (_isLongText && _isPauseMode && !_scrollFinished) return;
+
+        // 安全校验：如果状态标记为长文本但当前条目不是，则重置状态
+        if (_isLongText && _currentIndex >= 0 && _currentIndex < _entries.Count && !_entries[_currentIndex].IsLongText)
+        {
+            StopHorizontalScroll();
+        }
+
         _currentIndex = GetNextIndex();
         if (_currentIndex < 0 || _currentIndex >= _entries.Count) return;
         await ApplyEntryAsync(_entries[_currentIndex]);
@@ -573,6 +580,14 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private void OnScrollTick(object? sender, EventArgs e)
     {
         if (!_isScrolling || _textTransform == null || _scrollPausedAtEnd) return;
+
+        // 安全校验：当前条目是否真的是长文本，防止状态错乱导致非长文本被滚动
+        if (_currentIndex >= 0 && _currentIndex < _entries.Count && !_entries[_currentIndex].IsLongText)
+        {
+            StopHorizontalScroll();
+            return;
+        }
+
         double elapsed = (DateTime.UtcNow - _scrollStartTime).TotalSeconds;
         double offset = elapsed * _effectiveScrollSpeed;
 
@@ -583,13 +598,13 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             {
                 var entry = _entries[_currentIndex];
                 if (entry.PauseAfterScroll)
-            {
-                _scrollTimer.Stop(); // 滚动完成，停止滚动定时器
-                _scrollPausedAtEnd = true; _scrollFinished = true;
-                Timer.Stop();
-                Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.5, entry.Duration));
-                Timer.Start();
-            }
+                {
+                    _scrollTimer.Stop(); // 滚动完成，停止滚动定时器
+                    _scrollPausedAtEnd = true; _scrollFinished = true;
+                    Timer.Stop();
+                    Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.5, entry.Duration));
+                    Timer.Start();
+                }
                 else
                 {
                     _scrollPausedAtEnd = true;
