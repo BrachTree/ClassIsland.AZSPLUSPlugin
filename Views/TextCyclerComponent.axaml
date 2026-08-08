@@ -40,5 +40,12 @@
                 </TextBlock.Transitions>
             </TextBlock>
         </ScrollViewer>
+        <TextBlock x:Name="SuffixTextBlock"
+                   Text=""
+                   FontSize="{Binding Settings.FontSize}"
+                   VerticalAlignment="Center"
+                   TextWrapping="NoWrap"
+                   Opacity="1"
+                   IsVisible="False" />
     </StackPanel>
 </controls:ComponentBase>

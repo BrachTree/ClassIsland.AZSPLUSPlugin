@@ -38,6 +38,15 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         /// </summary>
         public bool ShowAttachedPrefix { get; set; } = false;
         /// <summary>
+        /// 紧贴后缀文本（固定显示），null 表示无后缀。
+        /// </summary>
+        public string? AttachedSuffixText { get; set; }
+        public Color AttachedSuffixColor { get; set; } = Colors.White;
+        /// <summary>
+        /// 该条目是否应显示紧贴后缀。
+        /// </summary>
+        public bool ShowAttachedSuffix { get; set; } = false;
+        /// <summary>
         /// 动画类型覆盖。null/空 = 使用组件设置，A-E = 指定动画类型。
         /// </summary>
         public string? AnimationTypeOverride { get; set; }
@@ -155,6 +164,15 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                 attachedColor = frame.AttachedPrefix.Color;
             }
 
+            // 紧贴后缀
+            string? suffixText = null;
+            Color suffixColor = Colors.White;
+            if (frame.HasAttachedSuffix)
+            {
+                suffixText = frame.AttachedSuffix!.Text;
+                suffixColor = frame.AttachedSuffix.Color;
+            }
+
             // 前缀单句
             if (frame.HasPrefix && !string.IsNullOrWhiteSpace(frame.Prefix!.Text))
             {
@@ -190,6 +208,9 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                         AttachedPrefixText = attachedText,
                         AttachedPrefixColor = attachedColor,
                         ShowAttachedPrefix = attachedText != null,
+                        AttachedSuffixText = suffixText,
+                        AttachedSuffixColor = suffixColor,
+                        ShowAttachedSuffix = suffixText != null,
                         AnimationTypeOverride = frame.GroupAnimationType
                     });
                 }
@@ -254,6 +275,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             MainTextBlock.Text = Settings.IsLoaded ? "（文件为空）" : "请选择文本文件…";
             MainTextBlock.Foreground = new SolidColorBrush(Colors.White);
             PrefixTextBlock.IsVisible = false;
+            SuffixTextBlock.IsVisible = false;
             return;
         }
 
@@ -286,7 +308,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         await ApplyEntryAsync(_entries[_currentIndex]);
     }
 
-    // === 前缀显示 ===
+    // === 前缀/后缀显示 ===
 
     private void UpdateAttachedPrefix(string? text, Color color)
     {
@@ -301,6 +323,20 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         else
         {
             PrefixTextBlock.IsVisible = false;
+        }
+    }
+
+    private void UpdateAttachedSuffix(string? text, Color color)
+    {
+        if (text != null)
+        {
+            SuffixTextBlock.Text = text;
+            SuffixTextBlock.Foreground = new SolidColorBrush(color);
+            SuffixTextBlock.IsVisible = true;
+        }
+        else
+        {
+            SuffixTextBlock.IsVisible = false;
         }
     }
 
@@ -393,9 +429,11 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
         try
         {
-            // 更新紧贴前缀
+            // 更新紧贴前缀和后缀
             UpdateAttachedPrefix(entry.ShowAttachedPrefix ? entry.AttachedPrefixText : null,
                                   entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White);
+            UpdateAttachedSuffix(entry.ShowAttachedSuffix ? entry.AttachedSuffixText : null,
+                                 entry.ShowAttachedSuffix ? entry.AttachedSuffixColor : Colors.White);
 
             int transMs = GetTransitionDurationMs(entry.Duration);
 
@@ -629,6 +667,8 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         SetXYInstant(0, 0);
         UpdateAttachedPrefix(entry.ShowAttachedPrefix ? entry.AttachedPrefixText : null,
                               entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White);
+        UpdateAttachedSuffix(entry.ShowAttachedSuffix ? entry.AttachedSuffixText : null,
+                             entry.ShowAttachedSuffix ? entry.AttachedSuffixColor : Colors.White);
         MainTextBlock.Text = entry.Text;
         MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
         MainTextBlock.Opacity = 1;

@@ -121,6 +121,7 @@ public static class TextFileParser
 
         string prefixPart = line.Substring(0, bracketIndex).Trim();
         string groupContent = line.Substring(bracketIndex + 1, closeBracket - bracketIndex - 1).Trim();
+        string suffixPart = closeBracket + 1 < line.Length ? line.Substring(closeBracket + 1).Trim() : "";
 
         // 先解析组内容
         ParseGroup(groupContent, frame);
@@ -157,7 +158,22 @@ public static class TextFileParser
             }
         }
 
-        if (!frame.HasPrefix && !frame.HasGroup && !frame.HasAttachedPrefix)
+        // 解析 ] 后面的后缀文本
+        if (!string.IsNullOrWhiteSpace(suffixPart))
+        {
+            var (suffixText, _, suffixColor, _, _, _) = ExtractTextAndParams(suffixPart, 0);
+            var finalSuffixText = ReplaceUnderscores(suffixText);
+            if (!string.IsNullOrWhiteSpace(finalSuffixText))
+            {
+                frame.AttachedSuffix = new DisplayItem
+                {
+                    Text = finalSuffixText,
+                    Color = suffixColor
+                };
+            }
+        }
+
+        if (!frame.HasPrefix && !frame.HasGroup && !frame.HasAttachedPrefix && !frame.HasAttachedSuffix)
             return null;
 
         return frame;
