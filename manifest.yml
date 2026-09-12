@@ -4,9 +4,9 @@
 
 id: ClassIsland.AZSMYPlugin
 name: AZS.Plus For Classisland
-description: 支持从本地txt文件读取文本并轮播显示，支持多种过渡动画、长文本滚动、组句/混合句式及丰富的自定义选项。
+description: 支持从本地 txt 文件读取文本轮播显示（多种过渡动画、长文本滚动、组句/混合句式），以及从表格导入生日并显示今日过生日的人数与名字。
 entranceAssembly: "ClassIsland.AZSMYPlugin.dll"
 url: https://github.com/BrachTree/ClassIsland.AZSPLUSPlugin
-version: 1.0.1.1
+version: 1.1.0.0
 apiVersion: 2.0.0.0
 author: AZS3604

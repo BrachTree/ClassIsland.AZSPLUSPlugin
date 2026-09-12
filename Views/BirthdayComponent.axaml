@@ -1,0 +1,21 @@
+<controls:ComponentBase x:TypeArguments="componentSettings:BirthdaySettings"
+                        x:Class="ClassIsland.AZSMYPlugin.Views.BirthdayComponent"
+                        xmlns="https://github.com/avaloniaui"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                        xmlns:local="clr-namespace:ClassIsland.AZSMYPlugin.Views"
+                        xmlns:controls="clr-namespace:ClassIsland.Core.Abstractions.Controls;assembly=ClassIsland.Core"
+                        xmlns:componentSettings="clr-namespace:ClassIsland.AZSMYPlugin.Models.ComponentSettings"
+                        mc:Ignorable="d"
+                        d:DesignHeight="60" d:DesignWidth="350">
+    <TextBlock x:Name="MainTextBlock"
+               DataContext="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=local:BirthdayComponent}}"
+               Text="请选择生日表格…"
+               FontSize="{Binding Settings.FontSize}"
+               TextWrapping="Wrap"
+               VerticalAlignment="Center"
+               HorizontalAlignment="Center"
+               TextAlignment="Center"
+               Opacity="1" />
+</controls:ComponentBase>

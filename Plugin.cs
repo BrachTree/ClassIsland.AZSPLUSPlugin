@@ -14,5 +14,8 @@ public class Plugin : PluginBase
     {
         // 注册文本轮播组件
         services.AddComponent<TextCyclerComponent, TextCyclerSettingsControl>();
+
+        // 注册生日显示组件
+        services.AddComponent<BirthdayComponent, BirthdaySettingsControl>();
     }
 }
