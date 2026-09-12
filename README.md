@@ -2,6 +2,9 @@
 
 ## 已上线功能
 
+### [▷文本轮播](https://github.com/BrachTree/ClassIsland.AZSPLUSPlugin#%E6%96%87%E6%9C%AC%E8%BD%AE%E6%92%AD)
+### [▷生日显示🎂](https://github.com/BrachTree/ClassIsland.AZSPLUSPlugin#%E7%94%9F%E6%97%A5%E6%98%BE%E7%A4%BA)
+
 ### 文本轮播
 
 从本地 txt 文件读取名言或任意文本内容，在 ClassIsland 界面上轮播显示，支持丰富的自定义选项，让你的桌面更加个性化。
