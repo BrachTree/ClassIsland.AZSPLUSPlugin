@@ -51,7 +51,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         /// </summary>
         public string? AnimationTypeOverride { get; set; }
         /// <summary>
-        /// 是否为长文本（需水平滚动）。通过 &lt;long&gt; 参数显式指定。
+        /// 是否为长文本（需水平滚动）。通过 &lt;long&gt; 参数显式指定（仅独立单句）。
         /// </summary>
         public bool IsLongText { get; set; } = false;
     }
@@ -59,8 +59,12 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private readonly List<DisplayEntry> _entries = new();
     private readonly Queue<int> _randomFramePlaylist = new();
     private readonly List<int> _frameFirstIndices = new();
+    private readonly Dictionary<int, int> _frameGroupFirstIndex = new();
     private int _currentIndex = -1;
     private bool _isTransitioning = false;
+    // 组句循环：当前组句所属帧索引与开始时间，用于保证整组显示够「默认显示时长」。
+    private int _currentGroupFrameIndex = -1;
+    private DateTime _currentGroupStartTime = DateTime.MinValue;
 
     private TranslateTransform? _textTransform;
     private static readonly Transitions YTransitions = new()
@@ -88,6 +92,12 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     private bool _scrollFinished = false;
     private bool _isPauseMode = false;
 
+    /// <summary>
+    /// 下一次允许切换到下一句的最早时刻。用于保证「设定的显示时长」被完整等待：
+    /// 切换间隔等于设定时长（过渡动画包含在内）；长文本滚动完成后等待从滚动结束时刻起算。
+    /// </summary>
+    private DateTime _advanceNotBefore = DateTime.MinValue;
+
     // 当前显示的紧贴前缀信息
     private string? _currentAttachedPrefixText;
     private Color _currentAttachedPrefixColor = Colors.White;
@@ -106,10 +116,9 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             Settings.PropertyChanged += OnSettingsPropertyChanged;
             Settings.Frames.CollectionChanged += OnFramesCollectionChanged;
             if (!Settings.IsLoaded) Settings.LoadFromFile();
+            Timer.Tick += OnTimerTick;
             RebuildEntries();
             ShowFirst();
-            Timer.Tick += OnTimerTick;
-            StartTimer();
         };
 
         DetachedFromVisualTree += (_, _) =>
@@ -118,6 +127,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             Settings.Frames.CollectionChanged -= OnFramesCollectionChanged;
             Timer.Stop();
             Timer.Tick -= OnTimerTick;
+            _advanceNotBefore = DateTime.MinValue;
             _scrollTimer.Stop();
             _scrollTimer.Tick -= OnScrollTick;
         };
@@ -131,24 +141,27 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                  e.PropertyName == nameof(TextCyclerSettings.EnableTransition) ||
                  e.PropertyName == nameof(TextCyclerSettings.AnimationType))
         {
-            RebuildEntries(); ShowFirst(); StartTimer();
+            RebuildEntries(); ShowFirst();
         }
         else if (e.PropertyName == nameof(TextCyclerSettings.DefaultScrollSpeed) ||
                  e.PropertyName == nameof(TextCyclerSettings.ContainerWidth))
         {
-            RebuildEntries(); ShowFirst(); StartTimer();
+            RebuildEntries(); ShowFirst();
         }
     }
 
     private void OnFramesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        RebuildEntries(); ShowFirst(); StartTimer();
+        RebuildEntries(); ShowFirst();
     }
 
     private void RebuildEntries()
     {
         _entries.Clear();
         _frameFirstIndices.Clear();
+        _frameGroupFirstIndex.Clear();
+        _currentGroupFrameIndex = -1;
+        _currentGroupStartTime = DateTime.MinValue;
 
         for (int fi = 0; fi < Settings.Frames.Count; fi++)
         {
@@ -190,29 +203,35 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                 });
             }
 
-            // 组内句子
+            // 组内句子：逐句轮播。整组作为一个显示单元，循环显示直到「默认显示时长」用完。
             if (frame.HasGroup)
             {
-                bool groupUseTransition = Settings.EnableTransition && !frame.DisableTransition;
-                foreach (var item in frame.GroupItems)
+                var groupItems = frame.GroupItems
+                    .Where(i => !string.IsNullOrWhiteSpace(i.Text))
+                    .ToList();
+                if (groupItems.Count > 0)
                 {
-                    if (string.IsNullOrWhiteSpace(item.Text)) continue;
-                    _entries.Add(new DisplayEntry
+                    _frameGroupFirstIndex[fi] = _entries.Count;
+                    bool groupUseTransition = Settings.EnableTransition && !frame.DisableTransition;
+                    foreach (var item in groupItems)
                     {
-                        Text = item.Text,
-                        Color = item.Color,
-                        Duration = frame.PerItemDuration > 0 ? frame.PerItemDuration : Settings.DefaultDuration,
-                        UseTransition = groupUseTransition,
-                        IsSingleSentence = false,
-                        FrameIndex = fi,
-                        AttachedPrefixText = attachedText,
-                        AttachedPrefixColor = attachedColor,
-                        ShowAttachedPrefix = attachedText != null,
-                        AttachedSuffixText = suffixText,
-                        AttachedSuffixColor = suffixColor,
-                        ShowAttachedSuffix = suffixText != null,
-                        AnimationTypeOverride = frame.GroupAnimationType
-                    });
+                        _entries.Add(new DisplayEntry
+                        {
+                            Text = item.Text,
+                            Color = item.Color,
+                            Duration = frame.PerItemDuration > 0 ? frame.PerItemDuration : Settings.DefaultDuration,
+                            UseTransition = groupUseTransition,
+                            IsSingleSentence = false,
+                            FrameIndex = fi,
+                            AttachedPrefixText = attachedText,
+                            AttachedPrefixColor = attachedColor,
+                            ShowAttachedPrefix = attachedText != null,
+                            AttachedSuffixText = suffixText,
+                            AttachedSuffixColor = suffixColor,
+                            ShowAttachedSuffix = suffixText != null,
+                            AnimationTypeOverride = frame.GroupAnimationType
+                        });
+                    }
                 }
             }
         }
@@ -239,12 +258,28 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
         if (_currentIndex >= 0)
         {
-            int currentFrame = _entries[_currentIndex].FrameIndex;
+            var current = _entries[_currentIndex];
+            int currentFrame = current.FrameIndex;
             for (int i = _currentIndex + 1; i < _entries.Count; i++)
                 if (_entries[i].FrameIndex == currentFrame)
                     return i;
+
+            // 帧内最后一句：若属于组句且整组显示时长还没用完，则循环回组句第一句继续轮播。
+            if (!current.IsSingleSentence && !IsGroupBudgetElapsed() &&
+                _frameGroupFirstIndex.TryGetValue(currentFrame, out int groupFirst))
+                return groupFirst;
         }
         return GetNextFrameFirstIndex();
+    }
+
+    /// <summary>
+    /// 组句是否已经显示够「默认显示时长」。只有进入过组句且有预算时才有意义。
+    /// </summary>
+    private bool IsGroupBudgetElapsed()
+    {
+        if (_currentGroupStartTime == DateTime.MinValue) return true;
+        double budget = Math.Max(0.1, Settings.DefaultDuration);
+        return (DateTime.UtcNow - _currentGroupStartTime).TotalSeconds >= budget;
     }
 
     private int GetNextFrameFirstIndex()
@@ -267,8 +302,10 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         return _frameFirstIndices[nextFrameIdx];
     }
 
-    private void ShowFirst()
+    private async void ShowFirst()
     {
+        Timer.Stop();
+        _advanceNotBefore = DateTime.MinValue;
         StopHorizontalScroll();
         if (_entries.Count == 0)
         {
@@ -288,13 +325,29 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         else
             _currentIndex = 0;
 
-        ApplyEntry(_entries[_currentIndex]);
-        _ = StartHorizontalScrollIfNeededAsync(_entries[_currentIndex]);
+        var entry = _entries[_currentIndex];
+        ApplyEntry(entry);
+
+        // 先完成滚动初始化，再开始计时，确保第一条也按完整时长显示。
+        try { await StartHorizontalScrollIfNeededAsync(entry); }
+        finally { ArmAdvanceTimer(entry.Duration); }
     }
 
     private async void OnTimerTick(object? sender, EventArgs e)
     {
         if (_isTransitioning || _entries.Count == 0) return;
+
+        // 设定的等待时间尚未走完（可能是被提前唤醒的 tick），重新计时，避免提前切换。
+        var remaining = _advanceNotBefore - DateTime.UtcNow;
+        if (remaining > TimeSpan.FromMilliseconds(30))
+        {
+            Timer.Stop();
+            Timer.Interval = remaining;
+            Timer.Start();
+            return;
+        }
+
+        // 长文本正在水平滚动（且设置为滚动完暂停）时，等滚动结束后再按设定时长切换。
         if (_isLongText && _isPauseMode && !_scrollFinished) return;
 
         // 安全校验：如果状态标记为长文本但当前条目不是，则重置状态
@@ -391,6 +444,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     /// 根据条目时长计算过渡动画时长。
     /// 每步动画时长 = 显示时长的25%，总动画 = 2步 = 50%。
     /// 最小30ms保证极短时长也有动画，最大400ms避免长时长动画过慢。
+    /// 注意：动画总时长始终小于显示时长，避免切换间隔超过设定值。
     /// </summary>
     private int GetTransitionDurationMs(double entryDuration)
     {
@@ -425,7 +479,11 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     {
         _isTransitioning = true;
         Timer.Stop();
+        _advanceNotBefore = DateTime.MinValue;
         StopHorizontalScroll();
+        TrackGroupState(entry);
+        // 从此刻开始计时：切换间隔 = 设定显示时长（过渡动画时间包含在内），避免组句切换被动画拖慢。
+        ArmAdvanceTimer(entry.Duration);
 
         try
         {
@@ -436,10 +494,6 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                                  entry.ShowAttachedSuffix ? entry.AttachedSuffixColor : Colors.White);
 
             int transMs = GetTransitionDurationMs(entry.Duration);
-
-            // 立即启动 Timer，显示时长包含动画时间
-            Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.1, entry.Duration));
-            Timer.Start();
 
             if (!entry.UseTransition)
             {
@@ -464,6 +518,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         }
         finally { _isTransitioning = false; }
 
+        // 长文本水平滚动：滚动完成时 OnScrollTick 会按滚动结束时刻重新计时。
         await StartHorizontalScrollIfNeededAsync(entry);
     }
 
@@ -639,9 +694,8 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                 {
                     _scrollTimer.Stop(); // 滚动完成，停止滚动定时器
                     _scrollPausedAtEnd = true; _scrollFinished = true;
-                    Timer.Stop();
-                    Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.5, entry.Duration));
-                    Timer.Start();
+                    // 从滚动结束的时刻开始计时：滚动完成后完整等待设定的显示时长再切换下一句
+                    ArmAdvanceTimer(entry.Duration);
                 }
                 else
                 {
@@ -664,6 +718,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     private void ApplyEntry(DisplayEntry entry)
     {
+        TrackGroupState(entry);
         SetXYInstant(0, 0);
         UpdateAttachedPrefix(entry.ShowAttachedPrefix ? entry.AttachedPrefixText : null,
                               entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White);
@@ -674,14 +729,36 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         MainTextBlock.Opacity = 1;
     }
 
-    private void StartTimer()
+    /// <summary>
+    /// 记录当前组句的起始时刻。进入新的一组时开始计时；组句内循环时保持起始时刻不变。
+    /// </summary>
+    private void TrackGroupState(DisplayEntry entry)
     {
-        if (_entries.Count == 0) return;
-        double duration = 5.0;
-        if (_currentIndex >= 0 && _currentIndex < _entries.Count)
-            duration = _entries[_currentIndex].Duration;
-        Timer.Interval = TimeSpan.FromSeconds(Math.Max(0.1, duration));
+        if (!entry.IsSingleSentence)
+        {
+            if (_currentGroupFrameIndex != entry.FrameIndex)
+            {
+                _currentGroupFrameIndex = entry.FrameIndex;
+                _currentGroupStartTime = DateTime.UtcNow;
+            }
+        }
+        else
+        {
+            _currentGroupFrameIndex = -1;
+            _currentGroupStartTime = DateTime.MinValue;
+        }
+    }
+
+    /// <summary>
+    /// 从当前时刻开始计时，经过 <paramref name="seconds"/> 秒后才允许切换到下一句。
+    /// 与 <see cref="_advanceNotBefore"/> 配合，保证设定的显示时长被完整等待。
+    /// </summary>
+    private void ArmAdvanceTimer(double seconds)
+    {
+        double s = Math.Max(0.1, seconds);
+        _advanceNotBefore = DateTime.UtcNow.AddSeconds(s);
         Timer.Stop();
+        Timer.Interval = TimeSpan.FromSeconds(s);
         Timer.Start();
     }
 }
