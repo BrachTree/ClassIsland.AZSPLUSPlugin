@@ -13,9 +13,15 @@ public class DisplayItem
     public string Text { get; set; } = "";
 
     /// <summary>
-    /// 文本颜色，默认白色
+    /// 文本颜色，默认白色。当 <see cref="GradientColors"/> 指定了至少两个颜色时，此属性不再生效。
     /// </summary>
     public Color Color { get; set; } = Colors.White;
+
+    /// <summary>
+    /// 文本渐变色列表（至少 2 个颜色时按水平方向从左到右渐变）。
+    /// 通过 &lt;#FF0000#00FF00#0000FF&gt; 参数指定，null 时使用 <see cref="Color"/> 单色。
+    /// </summary>
+    public List<Color>? GradientColors { get; set; }
 
     /// <summary>
     /// 显示时长（秒）。仅对独立单句有效；组内句子的时长由组的 PerItemDuration 统一控制。

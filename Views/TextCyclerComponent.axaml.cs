@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Media;
 using Avalonia.Threading;
+using ClassIsland.AZSMYPlugin.Helpers;
 using ClassIsland.AZSMYPlugin.Models;
 using ClassIsland.AZSMYPlugin.Models.ComponentSettings;
 using ClassIsland.Core.Abstractions.Controls;
@@ -22,6 +23,10 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
     {
         public string Text { get; set; } = "";
         public Color Color { get; set; } = Colors.White;
+        /// <summary>
+        /// 文本渐变色（至少 2 个颜色时按水平方向从左到右渐变），null 表示使用 <see cref="Color"/> 单色。
+        /// </summary>
+        public List<Color>? GradientColors { get; set; }
         public double Duration { get; set; } = 5.0;
         public bool UseTransition { get; set; } = false;
         public double ScrollSpeed { get; set; } = 0;
@@ -34,6 +39,10 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         public string? AttachedPrefixText { get; set; }
         public Color AttachedPrefixColor { get; set; } = Colors.White;
         /// <summary>
+        /// 紧贴前缀文本的渐变色，null 表示使用 <see cref="AttachedPrefixColor"/> 单色。
+        /// </summary>
+        public List<Color>? AttachedPrefixGradientColors { get; set; }
+        /// <summary>
         /// 该条目是否属于同一帧内且紧贴前缀帧的组内条目（前缀应保持显示）。
         /// </summary>
         public bool ShowAttachedPrefix { get; set; } = false;
@@ -42,6 +51,10 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         /// </summary>
         public string? AttachedSuffixText { get; set; }
         public Color AttachedSuffixColor { get; set; } = Colors.White;
+        /// <summary>
+        /// 紧贴后缀文本的渐变色，null 表示使用 <see cref="AttachedSuffixColor"/> 单色。
+        /// </summary>
+        public List<Color>? AttachedSuffixGradientColors { get; set; }
         /// <summary>
         /// 该条目是否应显示紧贴后缀。
         /// </summary>
@@ -171,19 +184,23 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             // 紧贴前缀
             string? attachedText = null;
             Color attachedColor = Colors.White;
+            List<Color>? attachedGradientColors = null;
             if (frame.HasAttachedPrefix)
             {
                 attachedText = frame.AttachedPrefix!.Text;
                 attachedColor = frame.AttachedPrefix.Color;
+                attachedGradientColors = frame.AttachedPrefix.GradientColors;
             }
 
             // 紧贴后缀
             string? suffixText = null;
             Color suffixColor = Colors.White;
+            List<Color>? suffixGradientColors = null;
             if (frame.HasAttachedSuffix)
             {
                 suffixText = frame.AttachedSuffix!.Text;
                 suffixColor = frame.AttachedSuffix.Color;
+                suffixGradientColors = frame.AttachedSuffix.GradientColors;
             }
 
             // 前缀单句
@@ -193,6 +210,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                 {
                     Text = frame.Prefix.Text,
                     Color = frame.Prefix.Color,
+                    GradientColors = frame.Prefix.GradientColors,
                     Duration = frame.Prefix.Duration > 0 ? frame.Prefix.Duration : Settings.DefaultDuration,
                     UseTransition = Settings.EnableTransition,
                     ScrollSpeed = frame.Prefix.ScrollSpeed,
@@ -219,15 +237,18 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
                         {
                             Text = item.Text,
                             Color = item.Color,
+                            GradientColors = item.GradientColors,
                             Duration = frame.PerItemDuration > 0 ? frame.PerItemDuration : Settings.DefaultDuration,
                             UseTransition = groupUseTransition,
                             IsSingleSentence = false,
                             FrameIndex = fi,
                             AttachedPrefixText = attachedText,
                             AttachedPrefixColor = attachedColor,
+                            AttachedPrefixGradientColors = attachedGradientColors,
                             ShowAttachedPrefix = attachedText != null,
                             AttachedSuffixText = suffixText,
                             AttachedSuffixColor = suffixColor,
+                            AttachedSuffixGradientColors = suffixGradientColors,
                             ShowAttachedSuffix = suffixText != null,
                             AnimationTypeOverride = frame.GroupAnimationType
                         });
@@ -363,14 +384,14 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
     // === 前缀/后缀显示 ===
 
-    private void UpdateAttachedPrefix(string? text, Color color)
+    private void UpdateAttachedPrefix(string? text, Color color, List<Color>? gradientColors = null)
     {
         _currentAttachedPrefixText = text;
         _currentAttachedPrefixColor = color;
         if (text != null)
         {
             PrefixTextBlock.Text = text;
-            PrefixTextBlock.Foreground = new SolidColorBrush(color);
+            PrefixTextBlock.Foreground = TextBrushFactory.Create(color, gradientColors);
             PrefixTextBlock.IsVisible = true;
         }
         else
@@ -379,12 +400,12 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         }
     }
 
-    private void UpdateAttachedSuffix(string? text, Color color)
+    private void UpdateAttachedSuffix(string? text, Color color, List<Color>? gradientColors = null)
     {
         if (text != null)
         {
             SuffixTextBlock.Text = text;
-            SuffixTextBlock.Foreground = new SolidColorBrush(color);
+            SuffixTextBlock.Foreground = TextBrushFactory.Create(color, gradientColors);
             SuffixTextBlock.IsVisible = true;
         }
         else
@@ -489,9 +510,11 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         {
             // 更新紧贴前缀和后缀
             UpdateAttachedPrefix(entry.ShowAttachedPrefix ? entry.AttachedPrefixText : null,
-                                  entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White);
+                                  entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White,
+                                  entry.ShowAttachedPrefix ? entry.AttachedPrefixGradientColors : null);
             UpdateAttachedSuffix(entry.ShowAttachedSuffix ? entry.AttachedSuffixText : null,
-                                 entry.ShowAttachedSuffix ? entry.AttachedSuffixColor : Colors.White);
+                                 entry.ShowAttachedSuffix ? entry.AttachedSuffixColor : Colors.White,
+                                 entry.ShowAttachedSuffix ? entry.AttachedSuffixGradientColors : null);
 
             int transMs = GetTransitionDurationMs(entry.Duration);
 
@@ -499,7 +522,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
             {
                 SetXYInstant(0, 0);
                 MainTextBlock.Text = entry.Text;
-                MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
+                MainTextBlock.Foreground = TextBrushFactory.Create(entry.Color, entry.GradientColors);
                 MainTextBlock.Opacity = 1;
                 await Task.Delay(30);
             }
@@ -537,7 +560,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         MainTextBlock.Opacity = 0;
         await Task.Delay(transMs);
         MainTextBlock.Text = entry.Text;
-        MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
+        MainTextBlock.Foreground = TextBrushFactory.Create(entry.Color, entry.GradientColors);
         MainTextBlock.Opacity = 1;
         await Task.Delay(transMs);
     }
@@ -558,7 +581,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
         // Step 2: 瞬间切换文本并定位到对面
         MainTextBlock.Text = entry.Text;
-        MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
+        MainTextBlock.Foreground = TextBrushFactory.Create(entry.Color, entry.GradientColors);
         SetXYInstant(0, scrollUp ? scrollDist : -scrollDist);
 
         // Step 3: 新文本滚入到中心
@@ -584,7 +607,7 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 
         // Step 2: 瞬间切换文本并定位到对面
         MainTextBlock.Text = entry.Text;
-        MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
+        MainTextBlock.Foreground = TextBrushFactory.Create(entry.Color, entry.GradientColors);
         SetXYInstant(scrollLeft ? scrollDist : -scrollDist, 0);
 
         // Step 3: 新文本从另一侧滚入到中心
@@ -721,11 +744,13 @@ public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
         TrackGroupState(entry);
         SetXYInstant(0, 0);
         UpdateAttachedPrefix(entry.ShowAttachedPrefix ? entry.AttachedPrefixText : null,
-                              entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White);
+                              entry.ShowAttachedPrefix ? entry.AttachedPrefixColor : Colors.White,
+                              entry.ShowAttachedPrefix ? entry.AttachedPrefixGradientColors : null);
         UpdateAttachedSuffix(entry.ShowAttachedSuffix ? entry.AttachedSuffixText : null,
-                             entry.ShowAttachedSuffix ? entry.AttachedSuffixColor : Colors.White);
+                             entry.ShowAttachedSuffix ? entry.AttachedSuffixColor : Colors.White,
+                             entry.ShowAttachedSuffix ? entry.AttachedSuffixGradientColors : null);
         MainTextBlock.Text = entry.Text;
-        MainTextBlock.Foreground = new SolidColorBrush(entry.Color);
+        MainTextBlock.Foreground = TextBrushFactory.Create(entry.Color, entry.GradientColors);
         MainTextBlock.Opacity = 1;
     }
 

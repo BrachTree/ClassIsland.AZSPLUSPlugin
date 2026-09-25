@@ -9,22 +9,29 @@ namespace ClassIsland.AZSMYPlugin.Helpers;
 /// <summary>
 /// 解析文本文件，将每一行转换为 <see cref="DisplayFrame"/>。
 ///
-/// 参数使用 &lt;&gt; 包裹，例如 &lt;5&gt; 表示显示时长5秒，&lt;#FF0000&gt; 表示红色。
+/// 参数使用 &lt;&gt; 包裹，例如 &lt;5&gt; 表示显示时长5秒，&lt;#FF0000&gt; 表示红色，
+/// &lt;#FF0000#00FF00#0000FF&gt; 表示红绿蓝渐变色。
 /// 文本中的下划线 _ 会被替换为空格，用于在组内创建含空格的句子。
 ///
 /// 支持的格式（颜色均可有可无，默认白色）：
-/// 1. 单句：  句子 &lt;显示时长&gt; &lt;颜色&gt; &lt;滚动速度px&gt; &lt;是否滚动完暂停&gt; &lt;long&gt;
-/// 2. 组：    [句子1&lt;颜色&gt; 句子2 句子3 &lt;每句显示时长&gt; &lt;是否禁用过渡动画&gt; &lt;动画类型A-E&gt;]
-/// 3. 混合：  句子&lt;颜色&gt; [句子1 句子2 句子3 &lt;每句时长&gt; &lt;是否禁用过渡动画&gt; &lt;动画类型A-E&gt;]
+/// 1. 单句：  句子 &lt;显示时长&gt; &lt;颜色或渐变色&gt; &lt;滚动速度px&gt; &lt;是否滚动完暂停&gt; &lt;long&gt;
+/// 2. 组：    [句子1&lt;颜色或渐变色&gt; 句子2 句子3 &lt;每句显示时长&gt; &lt;是否禁用过渡动画&gt; &lt;动画类型A-E&gt;]
+/// 3. 混合：  句子&lt;颜色或渐变色&gt; [句子1 句子2 句子3 &lt;每句时长&gt; &lt;是否禁用过渡动画&gt; &lt;动画类型A-E&gt;]
 ///
 /// 参数说明：
 /// - &lt;显示时长&gt;：纯数字，如 &lt;5&gt; 表示5秒。&lt;50px&gt; 带px后缀则识别为滚动速度。
+/// - &lt;颜色&gt;：颜色名或十六进制颜色，如 &lt;#FF0000&gt;、&lt;Red&gt;。
+/// - &lt;渐变色&gt;：用 # 分隔的 2 个及以上颜色，如 &lt;#FF0000#00FF00#0000FF&gt;，文本按水平方向从左到右渐变。
 /// - &lt;滚动速度px&gt;：水平滚动速度（px/秒）。如 &lt;50px&gt;。
 /// - &lt;是否滚动完暂停&gt;：true=滚动完成后暂停在末尾，false=循环滚动。默认 true。
 /// - &lt;long&gt;：标记为长文本（需水平滚动）。不写则不滚动。
 /// - &lt;是否禁用过渡动画&gt;：true=禁用过渡动画，false=跟随组件设置。默认 false。
 /// - &lt;动画类型A-E&gt;：A=淡入淡出，B=向上滚动，C=向下滚动，D=向左滚动，E=向右滚动。默认 B。
 ///   仅组内句子生效，单句使用组件设置中的动画类型。
+///
+/// 颜色和渐变色既可以作为独立参数（如 句子 &lt;#FF0000&gt;、句子 &lt;#FF0000#00FF00&gt;），
+/// 也可以紧贴在文本末尾（如 句子&lt;#FF0000&gt;、红绿蓝渐变&lt;#FF0000#00FF00#0000FF&gt;）。
+/// 组末尾的独立渐变色参数会作为组内所有句子的默认渐变色，句子自身的渐变色优先。
 ///
 /// 注意：组格式和混合格式中的组内部分**不支持滚动**，不解析滚动速度和暂停参数。
 /// </summary>
@@ -87,21 +94,22 @@ public static class TextFileParser
     }
 
     /// <summary>
-    /// 解析纯单句行：句子 &lt;显示时长&gt; &lt;颜色&gt; &lt;滚动速度&gt; &lt;是否滚动完暂停&gt;
+    /// 解析纯单句行：句子 &lt;显示时长&gt; &lt;颜色或渐变色&gt; &lt;滚动速度&gt; &lt;是否滚动完暂停&gt;
     /// </summary>
     private static DisplayFrame ParseSingleSentence(string line)
     {
-        var (text, duration, color, scrollSpeed, pauseAfterScroll, isLongText) = ExtractTextAndParams(line, 0);
+        var p = ExtractTextAndParams(line, 0);
         return new DisplayFrame
         {
             Prefix = new DisplayItem
             {
-                Text = ReplaceUnderscores(text),
-                Color = color,
-                Duration = duration,
-                ScrollSpeed = scrollSpeed,
-                PauseAfterScroll = pauseAfterScroll,
-                IsLongText = isLongText
+                Text = ReplaceUnderscores(p.Text),
+                Color = p.Color,
+                GradientColors = p.GradientColors,
+                Duration = p.Duration,
+                ScrollSpeed = p.ScrollSpeed,
+                PauseAfterScroll = p.PauseAfterScroll,
+                IsLongText = p.IsLongText
             }
         };
     }
@@ -128,8 +136,8 @@ public static class TextFileParser
 
         if (!string.IsNullOrWhiteSpace(prefixPart))
         {
-            var (text, duration, color, scrollSpeed, pauseAfterScroll, isLongText) = ExtractTextAndParams(prefixPart, 0);
-            var prefixText = ReplaceUnderscores(text);
+            var p = ExtractTextAndParams(prefixPart, 0);
+            var prefixText = ReplaceUnderscores(p.Text);
 
             // 判断 [ 前面是否有空格分隔
             bool attached = bracketIndex > 0 && !char.IsWhiteSpace(line[bracketIndex - 1]);
@@ -140,7 +148,8 @@ public static class TextFileParser
                 frame.AttachedPrefix = new DisplayItem
                 {
                     Text = prefixText,
-                    Color = color != Colors.White ? color : Colors.White
+                    Color = p.Color != Colors.White ? p.Color : Colors.White,
+                    GradientColors = p.GradientColors
                 };
             }
             else
@@ -149,11 +158,12 @@ public static class TextFileParser
                 frame.Prefix = new DisplayItem
                 {
                     Text = prefixText,
-                    Color = color,
-                    Duration = duration,
-                    ScrollSpeed = scrollSpeed,
-                    PauseAfterScroll = pauseAfterScroll,
-                    IsLongText = isLongText
+                    Color = p.Color,
+                    GradientColors = p.GradientColors,
+                    Duration = p.Duration,
+                    ScrollSpeed = p.ScrollSpeed,
+                    PauseAfterScroll = p.PauseAfterScroll,
+                    IsLongText = p.IsLongText
                 };
             }
         }
@@ -161,14 +171,15 @@ public static class TextFileParser
         // 解析 ] 后面的后缀文本
         if (!string.IsNullOrWhiteSpace(suffixPart))
         {
-            var (suffixText, _, suffixColor, _, _, _) = ExtractTextAndParams(suffixPart, 0);
-            var finalSuffixText = ReplaceUnderscores(suffixText);
+            var sp = ExtractTextAndParams(suffixPart, 0);
+            var finalSuffixText = ReplaceUnderscores(sp.Text);
             if (!string.IsNullOrWhiteSpace(finalSuffixText))
             {
                 frame.AttachedSuffix = new DisplayItem
                 {
                     Text = finalSuffixText,
-                    Color = suffixColor
+                    Color = sp.Color,
+                    GradientColors = sp.GradientColors
                 };
             }
         }
@@ -181,9 +192,10 @@ public static class TextFileParser
 
     /// <summary>
     /// 解析组内容。
-    /// 组尾部参数顺序：&lt;每句时长&gt; &lt;是否禁用过渡动画&gt; &lt;动画类型A-E&gt;
+    /// 组尾部参数顺序：&lt;每句时长&gt; &lt;是否禁用过渡动画&gt; &lt;动画类型A-E&gt; &lt;渐变色&gt;
     /// 类型模式：num, bool, string(A-E)
     /// 注意：组内不支持滚动，不解析滚动速度和暂停参数。
+    /// 组末尾的独立渐变色参数作为组内所有句子的默认渐变色。
     /// </summary>
     private static void ParseGroup(string content, DisplayFrame frame)
     {
@@ -208,11 +220,12 @@ public static class TextFileParser
                 break;
         }
 
-        // 分类参数：num, bool, string(动画类型)
+        // 分类参数：num, bool, string(动画类型), 渐变色
         // 注意：组内不支持滚动，忽略带px后缀的数字和滚动暂停布尔值
         var numbers = new List<double>();
         var bools = new List<bool>();
         var animTypes = new List<string>();
+        var gradients = new List<List<Color>>();
 
         foreach (var param in trailingParams)
         {
@@ -223,17 +236,20 @@ public static class TextFileParser
             {
                 // 组内不支持滚动，忽略 <50px> 参数
             }
+            else if (TryParseGradient(inner, out var gradient))
+                gradients.Add(gradient);
             else if (double.TryParse(inner, NumberStyles.Float, CultureInfo.InvariantCulture, out double n))
                 numbers.Add(n);
             else if (TryParseAnimationType(inner, out string a))
                 animTypes.Add(a);
-            // 颜色在组级别不处理（颜色附着在句子上）
+            // 单色在组级别不处理（颜色附着在句子上）
         }
 
         // 按位置赋值
         // numbers: [perItemDuration]
         // bools: [disableTransition]
         // animTypes: [groupAnimationType]
+        // gradients: [groupGradient]（组内句子的默认渐变色）
         if (numbers.Count >= 1)
             frame.PerItemDuration = numbers[0];
 
@@ -243,21 +259,36 @@ public static class TextFileParser
         if (animTypes.Count >= 1)
             frame.GroupAnimationType = animTypes[0];
 
+        List<Color>? groupGradient = gradients.Count >= 1 ? gradients[0] : null;
+
         // 剩余的 token 是句子
         for (int i = 0; i < paramStart; i++)
         {
-            var (text, color) = ExtractSentenceAndColor(tokens[i]);
-            var finalText = ReplaceUnderscores(text);
+            var sentence = ExtractSentenceAndColor(tokens[i]);
+            var finalText = ReplaceUnderscores(sentence.Text);
             if (!string.IsNullOrWhiteSpace(finalText))
             {
                 frame.GroupItems.Add(new DisplayItem
                 {
                     Text = finalText,
-                    Color = color
+                    Color = sentence.Color,
+                    GradientColors = sentence.GradientColors ?? groupGradient
                 });
             }
         }
     }
+
+    /// <summary>
+    /// <see cref="ExtractTextAndParams"/> 的解析结果。
+    /// </summary>
+    private readonly record struct TextParams(
+        string Text,
+        double Duration,
+        Color Color,
+        double ScrollSpeed,
+        bool PauseAfterScroll,
+        bool IsLongText,
+        List<Color>? GradientColors);
 
     /// <summary>
     /// 从一段文本中提取尾部 &lt;参数&gt; 和剩余文本。
@@ -265,11 +296,12 @@ public static class TextFileParser
     /// - &lt;显示时长&gt;：纯数字，如 &lt;5&gt;
     /// - &lt;滚动速度px&gt;：数字+px后缀，如 &lt;50px&gt;
     /// - &lt;颜色&gt;：颜色名或十六进制
+    /// - &lt;渐变色&gt;：用 # 分隔的 2 个及以上颜色，如 &lt;#FF0000#00FF00#0000FF&gt;
     /// - &lt;是否滚动完暂停&gt;：true/false
     /// - &lt;long&gt;：标记为长文本（需水平滚动）
+    /// 若独立参数中没有颜色/渐变色，则继续尝试提取紧贴在文本末尾的 &lt;颜色或渐变色&gt;。
     /// </summary>
-    private static (string text, double duration, Color color, double scrollSpeed, bool pauseAfterScroll, bool isLongText)
-        ExtractTextAndParams(string line, double defaultDuration)
+    private static TextParams ExtractTextAndParams(string line, double defaultDuration)
     {
         line = line.Trim();
 
@@ -295,6 +327,7 @@ public static class TextFileParser
         double duration = defaultDuration;
         double scrollSpeed = 0;
         Color color = Colors.White;
+        List<Color>? gradientColors = null;
         bool pauseAfterScroll = true;
         bool isLongText = false;
         bool durationSet = false;
@@ -306,6 +339,8 @@ public static class TextFileParser
                 pauseAfterScroll = b;
             else if (TryParseColor(inner, out Color c))
                 color = c;
+            else if (TryParseGradient(inner, out var g))
+                gradientColors = g;
             else if (TryParseScrollSpeed(inner, out double sp))
                 scrollSpeed = sp;
             else if (TryParseLongFlag(inner))
@@ -321,13 +356,39 @@ public static class TextFileParser
             }
         }
 
-        return (line, duration, color, scrollSpeed, pauseAfterScroll, isLongText);
+        // 独立参数中没有颜色/渐变色时，尝试提取附着在文本末尾的颜色/渐变色，如 句子<#FF0000>、红绿蓝渐变<#FF0000#00FF00#0000FF>
+        // 若不是颜色/渐变色（如 <long>、<5>），则保持原样不处理
+        if (color == Colors.White && gradientColors == null)
+        {
+            var attached = AttachedColorRegex.Match(line);
+            if (attached.Success)
+            {
+                string spec = attached.Groups[2].Value;
+                if (TryParseColor(spec, out Color attachedColor))
+                {
+                    color = attachedColor;
+                    line = attached.Groups[1].Value.Trim();
+                }
+                else if (TryParseGradient(spec, out var attachedGradient))
+                {
+                    gradientColors = attachedGradient;
+                    line = attached.Groups[1].Value.Trim();
+                }
+            }
+        }
+
+        return new TextParams(line, duration, color, scrollSpeed, pauseAfterScroll, isLongText, gradientColors);
     }
 
     /// <summary>
-    /// 从一个 token 中提取文本和颜色。
+    /// <see cref="ExtractSentenceAndColor"/> 的解析结果。
     /// </summary>
-    private static (string text, Color color) ExtractSentenceAndColor(string token)
+    private readonly record struct SentenceInfo(string Text, Color Color, List<Color>? GradientColors);
+
+    /// <summary>
+    /// 从一个 token 中提取文本、颜色和渐变色。
+    /// </summary>
+    private static SentenceInfo ExtractSentenceAndColor(string token)
     {
         token = token.Trim();
 
@@ -335,8 +396,10 @@ public static class TextFileParser
         {
             var inner = GetParamInner(token);
             if (TryParseColor(inner, out Color paramColor))
-                return ("", paramColor);
-            return (token, Colors.White);
+                return new SentenceInfo("", paramColor, null);
+            if (TryParseGradient(inner, out var paramGradient))
+                return new SentenceInfo("", Colors.White, paramGradient);
+            return new SentenceInfo(token, Colors.White, null);
         }
 
         var match = AttachedColorRegex.Match(token);
@@ -345,10 +408,12 @@ public static class TextFileParser
             string text = match.Groups[1].Value.Trim();
             string colorStr = match.Groups[2].Value;
             if (TryParseColor(colorStr, out Color color))
-                return (text, color);
+                return new SentenceInfo(text, color, null);
+            if (TryParseGradient(colorStr, out var gradient))
+                return new SentenceInfo(text, Colors.White, gradient);
         }
 
-        return (token, Colors.White);
+        return new SentenceInfo(token, Colors.White, null);
     }
 
     /// <summary>
@@ -423,6 +488,45 @@ public static class TextFileParser
 
         color = Colors.White;
         return false;
+    }
+
+    /// <summary>
+    /// 尝试解析渐变色参数。格式为用 # 分隔的 2 个及以上颜色，如 "#FF0000#00FF00#0000FF"。
+    /// 颜色可以是十六进制或颜色名，如 "#FF0000#Lime#Blue"。
+    /// </summary>
+    private static bool TryParseGradient(string str, out List<Color> colors)
+    {
+        colors = new List<Color>();
+        if (string.IsNullOrWhiteSpace(str))
+            return false;
+
+        str = str.Trim();
+
+        var parts = str.Split('#', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+            return false;
+
+        var parsed = new List<Color>(parts.Length);
+        foreach (var part in parts)
+        {
+            var segment = part.Trim();
+            if (segment.Length == 0)
+                return false;
+
+            // 优先按颜色名解析，否则当作十六进制颜色（补回被当作分隔符的 #）
+            if (Color.TryParse(segment, out Color named))
+                parsed.Add(named);
+            else if (Color.TryParse("#" + segment, out Color hex))
+                parsed.Add(hex);
+            else
+                return false;
+        }
+
+        if (parsed.Count < 2)
+            return false;
+
+        colors = parsed;
+        return true;
     }
 
     private static bool TryParseBool(string str, out bool result)
