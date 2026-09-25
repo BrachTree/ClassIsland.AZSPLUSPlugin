@@ -14,9 +14,9 @@ namespace ClassIsland.AZSMYPlugin.Views;
 
 /// <summary>
 /// 文本轮播显示组件。从 txt 文件读取句子，按设定的时长随机或顺序轮播显示。
-/// 支持淡入淡出、上下左右滚动过渡动画，以及长文本水平滚动（仅单句）。
+/// 支持淡入淡出、上下左右滚动过渡动画，长文本水平滚动（仅单句），以及自定义文本颜色与渐变颜色。
 /// </summary>
-[ComponentInfo("A3F5E2B1-7C4D-4E8F-9A2B-5D1E7F3A6B8C", "文本轮播 - AZS.Plus", "\ue8a5", "从本地 txt 文件读取文本并轮播显示。支持单句/组句/混合句式、五种过渡动画（淡入淡出、上下左右滚动）、长文本水平滚动（<long> 标记）、自定义颜色与时长、随机/顺序轮播。早期版本，可能存在些许问题。此插件由 AI 开发。")]
+[ComponentInfo("A3F5E2B1-7C4D-4E8F-9A2B-5D1E7F3A6B8C", "文本轮播 - AZS.Plus", "\ue8a5", "从本地 txt 文件读取文本并轮播显示。支持单句/组句/混合句式、五种过渡动画（淡入淡出、上下左右滚动）、长文本水平滚动（<long> 标记）、自定义文本颜色与渐变颜色（如 <#FF0000#00FF00#0000FF>）、自定义时长、随机/顺序轮播。早期版本，可能存在些许问题。此插件由 AI 开发。")]
 public partial class TextCyclerComponent : ComponentBase<TextCyclerSettings>
 {
     private class DisplayEntry
