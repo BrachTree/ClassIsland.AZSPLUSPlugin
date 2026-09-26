@@ -1,4 +1,4 @@
-# AZS.Plus For Classisland
+# AZS.Plus For [Classisland](https://www.classisland.tech)
 
 ## 已上线功能
 
