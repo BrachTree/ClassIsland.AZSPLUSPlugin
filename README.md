@@ -233,3 +233,12 @@
 - **版本**：1.1.0.1
 - **框架**：基于 ClassIsland Plugin SDK 开发，使用 Avalonia UI 框架
 - **声明**：此插件由 AI 开发
+- **许可证**：[GNU General Public License v3.0](LICENSE)
+
+---
+
+## 许可证
+
+本项目采用 **GNU General Public License v3.0（GPL-3.0）** 许可，完整条款见 [LICENSE](LICENSE)。
+
+你可以自由使用、修改和分发本插件；基于本插件衍生的作品同样需要以 GPL-3.0 许可开源发布。
